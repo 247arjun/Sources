@@ -127,8 +127,10 @@ Example feeds to try:
 ### Managing Feeds & Folders
 - **Add Folder**: Click **+** → Add Folder or press ⇧⌘N
 - **Move to Folder**: Right-click feed → Move to Folder
+- **Collapse Folders**: Click disclosure triangle to collapse/expand folders (reduces scrolling)
 - **Multi-Select**: Click **+** → Select Feeds, then ⌘-click to select multiple
 - **Bulk Move/Delete**: Select multiple feeds, right-click for bulk actions
+- **Mark All as Read**: Right-click on folders, feeds, or smart folders for bulk mark as read
 - **Refresh**: Right-click feed → Refresh, or ⌘R for all feeds
 - **Delete**: Right-click → Delete
 
@@ -197,6 +199,7 @@ Example feeds to try:
 - [x] Article cache management
 - [x] Enhanced macOS Menu Bar support
 - [x] Performance optimizations for large feeds
+- [x] Collapsible folders and Mark All as Read
 - [ ] Feed update notifications
 - [ ] Custom themes and appearance options
 - [ ] macOS integration (Spotlight, Handoff)

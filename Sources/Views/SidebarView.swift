@@ -52,6 +52,11 @@ struct SidebarView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Mark All as Read") {
+                        viewModel.markAllAsReadInAllFeeds()
+                    }
+                }
                 
                 Button(action: {
                     viewModel.selectedFeed = nil
@@ -70,6 +75,11 @@ struct SidebarView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Mark All as Read") {
+                        viewModel.markAllAsReadInAllFeeds()
+                    }
+                }
                 
                 Button(action: {
                     viewModel.selectedFeed = nil
@@ -82,6 +92,11 @@ struct SidebarView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Mark All as Read") {
+                        viewModel.markAllAsReadInStarred()
+                    }
+                }
                 
                 Button(action: {
                     viewModel.selectedFeed = nil
@@ -94,11 +109,21 @@ struct SidebarView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Mark All as Read") {
+                        viewModel.markAllAsReadInRecent()
+                    }
+                }
             }
             
             // Folders with feeds
             ForEach(viewModel.folders) { folder in
-                Section {
+                DisclosureGroup(
+                    isExpanded: Binding(
+                        get: { !viewModel.isFolderCollapsed(folder) },
+                        set: { _ in viewModel.toggleFolderCollapse(folder) }
+                    )
+                ) {
                     ForEach(folder.feeds.filter { searchText.isEmpty || $0.title.localizedCaseInsensitiveContains(searchText) }) { feed in
                         FeedRow(feed: feed)
                             .tag(feed)
@@ -106,7 +131,7 @@ struct SidebarView: View {
                                 feedContextMenu(for: feed)
                             }
                     }
-                } header: {
+                } label: {
                     HStack {
                         Text(folder.name)
                         Spacer()
@@ -116,7 +141,14 @@ struct SidebarView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .contentShape(Rectangle())
                     .contextMenu {
+                        Button("Mark All as Read") {
+                            viewModel.markAllAsRead(in: folder)
+                        }
+                        
+                        Divider()
+                        
                         Button("Delete Folder", role: .destructive) {
                             viewModel.deleteFolder(folder)
                         }
@@ -305,6 +337,12 @@ struct SidebarView: View {
                     await viewModel.refreshFeed(feed)
                 }
             }
+            
+            Button("Mark All as Read") {
+                viewModel.markAllAsRead(for: feed)
+            }
+            
+            Divider()
         }
         
         Menu("Move to Folder") {

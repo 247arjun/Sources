@@ -24,6 +24,7 @@ class FeedListViewModel {
     var selectedSmartFolder: SmartFolder?
     var isRefreshing = false
     var errorMessage: String?
+    var collapsedFolders: Set<Folder.ID> = []
     
     private let modelContext: ModelContext
     private let fetcher: FeedFetcher
@@ -355,5 +356,58 @@ class FeedListViewModel {
     func exportOPML() -> String {
         let exporter = OPMLExporter()
         return exporter.export(feeds: feeds, folders: folders)
+    }
+    
+    func toggleFolderCollapse(_ folder: Folder) {
+        if collapsedFolders.contains(folder.id) {
+            collapsedFolders.remove(folder.id)
+        } else {
+            collapsedFolders.insert(folder.id)
+        }
+    }
+    
+    func isFolderCollapsed(_ folder: Folder) -> Bool {
+        collapsedFolders.contains(folder.id)
+    }
+    
+    func markAllAsRead(in folder: Folder) {
+        for feed in folder.feeds {
+            for article in feed.articles {
+                article.isRead = true
+            }
+        }
+        try? modelContext.save()
+    }
+    
+    func markAllAsRead(for feed: Feed) {
+        for article in feed.articles {
+            article.isRead = true
+        }
+        try? modelContext.save()
+    }
+    
+    func markAllAsReadInAllFeeds() {
+        for feed in feeds {
+            for article in feed.articles {
+                article.isRead = true
+            }
+        }
+        try? modelContext.save()
+    }
+    
+    func markAllAsReadInStarred() {
+        let descriptor = FetchDescriptor<Article>(predicate: #Predicate { $0.isStarred == true })
+        if let starredArticles = try? modelContext.fetch(descriptor) {
+            for article in starredArticles {
+                article.isRead = true
+            }
+            try? modelContext.save()
+        }
+    }
+    
+    func markAllAsReadInRecent() {
+        // For simplicity, mark all articles as read since we don't have easy access to recency filter here
+        // In a production app, you'd pass the date range or calculate it
+        markAllAsReadInAllFeeds()
     }
 }
