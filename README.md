@@ -1,18 +1,9 @@
 # Sources
 A modern macOS RSS Reader app built with SwiftUI
 
-## What's Working
+## Features
 
-1. ✅ **Add feeds** - Successfully adds RSS/Atom feeds with auto-discovery
-2. ✅ **Refresh feeds** - Fetches new articles and updates the feed
-3. ✅ **Display articles** - Shows all articles in the list view
-4. ✅ **3-panel layout** - Sidebar, article list, and article detail all functional
-5. ✅ **Read articles** - WebView displays article content
-6. ✅ **Mark as read/unread** - Toggle read status on articles
-7. ✅ **Sort & filter** - Sort by date/title, filter unread only
-8. ✅ **SwiftData persistence** - All data saved locally
-
-## Features (Phase 1 - MVP)
+### Phase 1 - MVP ✅
 
 ✅ **Three-Panel Layout**
 - Left panel: Feed list with unread counts
@@ -24,6 +15,8 @@ A modern macOS RSS Reader app built with SwiftUI
 - Refresh individual or all feeds
 - Delete feeds with context menu
 - Visual feed icons and unread badges
+- Folder organization for feeds
+- Multi-select for bulk operations (move, delete)
 
 ✅ **Article Reading**
 - Clean WebKit-based article rendering
@@ -38,11 +31,45 @@ A modern macOS RSS Reader app built with SwiftUI
 - Automatic cascading deletes
 
 ✅ **User Experience**
-- Keyboard shortcuts (⌘N for new feed)
+- Keyboard shortcuts (⌘N, ⌘R, ⌘O, j/k/u)
 - Context menus for quick actions
 - Sorting (newest/oldest/title)
 - Filter by unread status
 - Relative timestamps
+
+### Phase 2 - Core Features ✅
+
+✅ **Smart Folders**
+- All Feeds - View all articles across feeds
+- Unread - Quick access to unread articles
+- Recent - Articles from last 1 day, 7 days, or custom date range
+
+✅ **Full-Text Search**
+- Search across article titles, content, summaries, and authors
+- Real-time filtering as you type
+- Works with all views (feeds, smart folders)
+
+✅ **Auto-Refresh**
+- Configurable automatic refresh intervals
+- Settings window with enable/disable toggle
+- Choose refresh frequency (5, 15, 30, 60 minutes)
+- Background timer-based refresh
+
+✅ **Keyboard Shortcuts**
+- `j` - Next article
+- `k` - Previous article
+- `u` - Toggle read/unread
+- `⌘N` - Add new feed
+- `⇧⌘N` - Add new folder
+- `⌘R` - Refresh all feeds
+- `⌘O` - Import OPML
+
+✅ **OPML Import/Export**
+- Import feeds from other RSS readers
+- Export your feed collection
+- Preserves folder structure
+- Non-blocking background import
+- Security-scoped file access
 
 ## Project Structure
 
@@ -51,18 +78,24 @@ Sources/
 ├── SourcesApp.swift              # App entry point
 ├── Models/
 │   ├── Feed.swift                # RSS feed model
-│   └── Article.swift             # Article model
+│   ├── Article.swift             # Article model
+│   ├── Folder.swift              # Feed folder organization
+│   ├── AppSettings.swift         # User preferences
+│   └── OPMLDocument.swift        # OPML file document
 ├── ViewModels/
-│   ├── FeedListViewModel.swift   # Feed management logic
-│   └── ArticleListViewModel.swift # Article list logic
+│   ├── FeedListViewModel.swift   # Feed management, OPML, folders
+│   └── ArticleListViewModel.swift # Article list, search, smart folders
 ├── Views/
 │   ├── ContentView.swift         # Main 3-panel layout
-│   ├── SidebarView.swift         # Feed list (Panel 1)
-│   ├── ArticleListView.swift     # Article list (Panel 2)
-│   └── ArticleDetailView.swift   # Article viewer (Panel 3)
+│   ├── SidebarView.swift         # Feed list with smart folders
+│   ├── ArticleListView.swift     # Article list with search
+│   ├── ArticleDetailView.swift   # Article viewer (Panel 3)
+│   └── SettingsView.swift        # App preferences window
 └── Services/
     ├── FeedParser.swift          # RSS/Atom XML parsing
-    └── FeedFetcher.swift         # Network fetching
+    ├── FeedFetcher.swift         # Network fetching
+    ├── OPMLParser.swift          # OPML import parser
+    └── OPMLExporter.swift        # OPML export generator
 ```
 
 ## Requirements
@@ -79,7 +112,7 @@ Sources/
 
 ## Usage
 
-### Adding a Feed
+### Adding Feeds
 1. Click the **+** button in the sidebar or press ⌘N
 2. Enter a feed URL or website URL (auto-discovery will find the feed)
 3. Click **Add**
@@ -89,24 +122,45 @@ Example feeds to try:
 - `https://blog.swift.org/feed.xml`
 - `https://www.theverge.com/rss/index.xml`
 
-### Managing Feeds
-- **Refresh**: Right-click on a feed → Refresh
-- **Refresh All**: Click the refresh button in the toolbar
-- **Delete**: Right-click on a feed → Delete
+### Managing Feeds & Folders
+- **Add Folder**: Click **+** → Add Folder or press ⇧⌘N
+- **Move to Folder**: Right-click feed → Move to Folder
+- **Multi-Select**: Click **+** → Select Feeds, then ⌘-click to select multiple
+- **Bulk Move/Delete**: Select multiple feeds, right-click for bulk actions
+- **Refresh**: Right-click feed → Refresh, or ⌘R for all feeds
+- **Delete**: Right-click → Delete
+
+### Smart Folders
+- **All Feeds**: View all articles from all feeds
+- **Unread**: Quick access to unread articles
+- **Recent**: Filter by date range (1 day, 7 days, or custom)
+
+### Searching
+- Use the search bar at the top of the article list
+- Searches across titles, content, summaries, and authors
+- Works with feeds and smart folders
 
 ### Reading Articles
 - Click on any article in the middle panel to view it
 - Articles are automatically marked as read when viewed
-- Use the toolbar buttons to:
-  - Toggle read/unread status
-  - Share the article
-  - Open in your default browser
+- Use toolbar buttons to toggle read/unread, share, or open in browser
+- Navigate with keyboard: `j` (next), `k` (previous), `u` (toggle read)
 
 ### Filtering & Sorting
 - Use the **•••** menu in the article list to:
   - Sort by newest first, oldest first, or title
   - Toggle "Unread Only" filter
-- Click **Mark All Read** to mark all articles in the current feed as read
+- Click **Mark All Read** to mark all articles as read
+
+### OPML Import/Export
+- **Import**: Click **+** → Import OPML (⌘O)
+- **Export**: Click **+** → Export OPML
+- Preserves folder structure and organization
+
+### Settings
+- Access via Sources → Settings or ⌘,
+- Enable auto-refresh and set interval (5-60 minutes)
+- Settings persist across app launches
 
 ## Architecture
 
@@ -118,30 +172,25 @@ Example feeds to try:
 
 **RSS/Atom Support**: Custom XML parser supporting both feed formats
 
-## Known Limitations (Phase 1)
-
-- No folder organization yet
-- No OPML import/export
-- No full-text search
-- No podcast support
-- No automatic background refresh
-- No iCloud sync
-
 ## Roadmap
 
-### Phase 2 - Core Features
-- Folder organization
-- Search functionality
-- Automatic refresh intervals
-- Advanced keyboard shortcuts
-- OPML import/export
+### Phase 3 - Polish & Enhancements
+- [ ] Reader mode for clean article viewing
+- [ ] Starred/favorite articles
+- [ ] Article cache management
+- [ ] Feed update notifications
+- [ ] Podcast support
+- [ ] Performance optimizations for large feeds
+- [ ] Custom themes and appearance options
+- [ ] macOS integration (Spotlight, Handoff)
+- [ ] iCloud sync
 
-### Phase 3 - Enhancements
-- Reader mode for clean article viewing
-- Starred/favorite articles
-- Performance optimizations
-- Preferences window
-- macOS integration (Spotlight, Handoff)
+## Known Limitations
+
+- No podcast/audio enclosure support yet
+- No iCloud sync
+- No article caching (requires network for images)
+- Smart folder counts update on app restart
 
 ## License
 

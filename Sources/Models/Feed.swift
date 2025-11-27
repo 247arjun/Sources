@@ -21,6 +21,8 @@ final class Feed {
     @Relationship(deleteRule: .cascade, inverse: \Article.feed)
     var articles: [Article] = []
     
+    var folder: Folder?
+    
     var unreadCount: Int {
         articles.filter { !$0.isRead }.count
     }
@@ -32,7 +34,8 @@ final class Feed {
         siteURL: URL? = nil,
         feedDescription: String? = nil,
         imageURL: URL? = nil,
-        lastUpdated: Date = Date()
+        lastUpdated: Date = Date(),
+        folder: Folder? = nil
     ) {
         self.id = id
         self.title = title
@@ -41,5 +44,6 @@ final class Feed {
         self.feedDescription = feedDescription
         self.imageURL = imageURL
         self.lastUpdated = lastUpdated
+        self.folder = folder
     }
 }

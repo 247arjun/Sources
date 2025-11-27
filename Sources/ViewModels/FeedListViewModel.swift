@@ -10,22 +10,84 @@ import SwiftData
 
 @Observable
 class FeedListViewModel {
+    enum SmartFolder {
+        case allFeeds
+        case unread
+        case recent
+    }
+    
     var feeds: [Feed] = []
+    var folders: [Folder] = []
     var selectedFeed: Feed?
+    var selectedFeeds: Set<Feed> = []
+    var selectedSmartFolder: SmartFolder?
     var isRefreshing = false
     var errorMessage: String?
     
     private let modelContext: ModelContext
     private let fetcher: FeedFetcher
+    private var refreshTimer: Timer?
+    var settings: AppSettings?
     
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         self.fetcher = FeedFetcher()
     }
     
+    func startAutoRefresh(with settings: AppSettings) {
+        self.settings = settings
+        setupAutoRefresh()
+    }
+    
+    func setupAutoRefresh() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+        
+        guard let settings = settings, settings.autoRefreshEnabled else {
+            return
+        }
+        
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: settings.refreshInterval, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            Task {
+                await self.refreshAllFeeds()
+            }
+        }
+    }
+    
+    deinit {
+        refreshTimer?.invalidate()
+    }
+    
     func loadFeeds() {
-        let descriptor = FetchDescriptor<Feed>(sortBy: [SortDescriptor(\.title)])
-        feeds = (try? modelContext.fetch(descriptor)) ?? []
+        let feedDescriptor = FetchDescriptor<Feed>(sortBy: [SortDescriptor(\.title)])
+        feeds = (try? modelContext.fetch(feedDescriptor)) ?? []
+        
+        let folderDescriptor = FetchDescriptor<Folder>(sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)])
+        folders = (try? modelContext.fetch(folderDescriptor)) ?? []
+    }
+    
+    func addFolder(name: String) {
+        let folder = Folder(name: name, sortOrder: folders.count)
+        modelContext.insert(folder)
+        try? modelContext.save()
+        loadFeeds()
+    }
+    
+    func deleteFolder(_ folder: Folder) {
+        // Move feeds out of folder before deleting
+        for feed in folder.feeds {
+            feed.folder = nil
+        }
+        modelContext.delete(folder)
+        try? modelContext.save()
+        loadFeeds()
+    }
+    
+    func moveFeed(_ feed: Feed, to folder: Folder?) {
+        feed.folder = folder
+        try? modelContext.save()
+        loadFeeds()
     }
     
     func addFeed(urlString: String) async {
@@ -163,5 +225,134 @@ class FeedListViewModel {
         if selectedFeed?.id == feed.id {
             selectedFeed = nil
         }
+    }
+    
+    func deleteFeeds(_ feeds: Set<Feed>) {
+        for feed in feeds {
+            modelContext.delete(feed)
+        }
+        try? modelContext.save()
+        selectedFeeds.removeAll()
+        selectedFeed = nil
+        loadFeeds()
+    }
+    
+    func moveFeeds(_ feeds: Set<Feed>, to folder: Folder?) {
+        for feed in feeds {
+            feed.folder = folder
+        }
+        try? modelContext.save()
+        selectedFeeds.removeAll()
+        loadFeeds()
+    }
+    
+    func importOPML(from url: URL) {
+        Task {
+            do {
+                await MainActor.run {
+                    isRefreshing = true
+                    errorMessage = nil
+                }
+                
+                // Start accessing security-scoped resource
+                guard url.startAccessingSecurityScopedResource() else {
+                    throw NSError(domain: "FeedListViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to access the file. Please try selecting it again."])
+                }
+                defer { url.stopAccessingSecurityScopedResource() }
+                
+                let data = try Data(contentsOf: url)
+                let parser = OPMLParser()
+                let outlines = try parser.parse(data: data)
+                
+                await processOPMLOutlines(outlines, parentFolder: nil)
+                
+                await MainActor.run {
+                    loadFeeds()
+                    isRefreshing = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to import OPML: \(error.localizedDescription)"
+                    isRefreshing = false
+                }
+            }
+        }
+    }
+    
+    private func processOPMLOutlines(_ outlines: [OPMLOutline], parentFolder: Folder?) async {
+        for outline in outlines {
+            if outline.isFolder {
+                // Create folder
+                await MainActor.run {
+                    let folder = Folder(name: outline.title, sortOrder: folders.count)
+                    modelContext.insert(folder)
+                    try? modelContext.save()
+                    
+                    // Process children
+                    Task {
+                        await processOPMLOutlines(outline.children, parentFolder: folder)
+                    }
+                }
+            } else if let xmlUrlString = outline.xmlUrl, let xmlUrl = URL(string: xmlUrlString) {
+                // Check if feed already exists using fresh fetch
+                let feedDescriptor = FetchDescriptor<Feed>()
+                let allFeeds = await MainActor.run {
+                    do {
+                        return try modelContext.fetch(feedDescriptor)
+                    } catch {
+                        return []
+                    }
+                }
+                
+                if allFeeds.contains(where: { $0.feedURL == xmlUrl }) {
+                    continue
+                }
+                
+                // Add feed
+                do {
+                    let parsedFeed = try await fetcher.fetchFeed(from: xmlUrl)
+                    
+                    await MainActor.run {
+                        let feed = Feed(
+                            title: parsedFeed.title,
+                            feedURL: xmlUrl,
+                            siteURL: parsedFeed.siteURL,
+                            feedDescription: parsedFeed.description,
+                            imageURL: parsedFeed.imageURL,
+                            lastUpdated: Date()
+                        )
+                        feed.folder = parentFolder
+                        
+                        modelContext.insert(feed)
+                        
+                        // Add articles
+                        for parsedArticle in parsedFeed.articles {
+                            let article = Article(
+                                id: parsedArticle.id,
+                                title: parsedArticle.title,
+                                author: parsedArticle.author,
+                                content: parsedArticle.content,
+                                summary: parsedArticle.summary,
+                                url: parsedArticle.url,
+                                publishedDate: parsedArticle.publishedDate,
+                                feed: feed
+                            )
+                            modelContext.insert(article)
+                        }
+                        
+                        try? modelContext.save()
+                    }
+                } catch {
+                    // Log error but continue processing other feeds
+                    print("Failed to import feed \(xmlUrl): \(error.localizedDescription)")
+                    continue
+                }
+            }
+        }
+    }
+    
+    func exportOPML() -> String {
+        let exporter = OPMLExporter()
+        return exporter.export(feeds: feeds, folders: folders)
     }
 }
