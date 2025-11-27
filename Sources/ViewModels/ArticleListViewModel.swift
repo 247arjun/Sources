@@ -97,6 +97,14 @@ class ArticleListViewModel {
         loadArticles(for: feed)
     }
     
+    func markAllAsRead() {
+        // Mark all currently displayed articles as read
+        for article in articles {
+            article.isRead = true
+        }
+        try? modelContext.save()
+    }
+    
     func selectNextArticle() {
         guard let currentArticle = selectedArticle,
               let currentIndex = articles.firstIndex(where: { $0.id == currentArticle.id }),

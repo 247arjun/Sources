@@ -15,6 +15,20 @@ struct ContentView: View {
     var settings: AppSettings
     
     var body: some View {
+        mainContent
+            .onAppear(perform: handleOnAppear)
+            .onChange(of: settings.autoRefreshEnabled) { feedListViewModel?.setupAutoRefresh() }
+            .onChange(of: settings.refreshInterval) { feedListViewModel?.setupAutoRefresh() }
+            .onChange(of: settings.cacheSizeLimit) { Task { await performCacheMaintenance() } }
+            .onChange(of: settings.cacheAge) { Task { await performCacheMaintenance() } }
+            .modifier(ArticleNavigationModifier(viewModel: articleListViewModel))
+            .modifier(ViewMenuModifier(viewModel: feedListViewModel))
+            .modifier(ArticleActionModifier(viewModel: articleListViewModel))
+            .modifier(FeedActionModifier(viewModel: feedListViewModel))
+    }
+    
+    @ViewBuilder
+    private var mainContent: some View {
         Group {
             if let feedListViewModel = feedListViewModel,
                let articleListViewModel = articleListViewModel {
@@ -68,43 +82,128 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear {
-            if feedListViewModel == nil {
-                feedListViewModel = FeedListViewModel(modelContext: modelContext)
-                feedListViewModel?.loadFeeds()
-                feedListViewModel?.startAutoRefresh(with: settings)
+    }
+    
+    private func handleOnAppear() {
+        if feedListViewModel == nil {
+            feedListViewModel = FeedListViewModel(modelContext: modelContext)
+            feedListViewModel?.loadFeeds()
+            feedListViewModel?.startAutoRefresh(with: settings)
+        }
+        if articleListViewModel == nil {
+            articleListViewModel = ArticleListViewModel(modelContext: modelContext)
+        }
+        
+        Task {
+            await performCacheMaintenance()
+        }
+    }
+    
+    private func performCacheMaintenance() async {
+        // Clean up old cache based on age setting
+        if let maxAge = settings.cacheAge.timeInterval {
+            try? await CacheManager.shared.cleanupOldCache(olderThan: maxAge)
+        }
+        
+        // Enforce size limit
+        let sizeLimit = settings.cacheSizeLimit.bytes
+        if sizeLimit > 0 {
+            try? await CacheManager.shared.enforceSizeLimit(sizeLimit)
+        }
+    }
+}
+
+// MARK: - View Modifiers
+
+struct ArticleNavigationModifier: ViewModifier {
+    let viewModel: ArticleListViewModel?
+    
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .toggleReadRequested)) { _ in
+                if let article = viewModel?.selectedArticle {
+                    viewModel?.toggleReadStatus(article)
+                }
             }
-            if articleListViewModel == nil {
-                articleListViewModel = ArticleListViewModel(modelContext: modelContext)
+            .onReceive(NotificationCenter.default.publisher(for: .toggleStarRequested)) { _ in
+                if let article = viewModel?.selectedArticle {
+                    viewModel?.toggleStarred(article)
+                }
             }
-        }
-        .onChange(of: settings.autoRefreshEnabled) {
-            feedListViewModel?.setupAutoRefresh()
-        }
-        .onChange(of: settings.refreshInterval) {
-            feedListViewModel?.setupAutoRefresh()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .nextArticleRequested)) { _ in
-            articleListViewModel?.selectNextArticle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .previousArticleRequested)) { _ in
-            articleListViewModel?.selectPreviousArticle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleReadRequested)) { _ in
-            if let article = articleListViewModel?.selectedArticle {
-                articleListViewModel?.toggleReadStatus(article)
+            .onReceive(NotificationCenter.default.publisher(for: .openInBrowserRequested)) { _ in
+                if let article = viewModel?.selectedArticle {
+                    NSWorkspace.shared.open(article.url)
+                }
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleStarRequested)) { _ in
-            if let article = articleListViewModel?.selectedArticle {
-                articleListViewModel?.toggleStarred(article)
+    }
+}
+
+struct ViewMenuModifier: ViewModifier {
+    let viewModel: FeedListViewModel?
+    
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .showAllFeedsRequested)) { _ in
+                viewModel?.selectedSmartFolder = .allFeeds
+                viewModel?.selectedFeed = nil
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openInBrowserRequested)) { _ in
-            if let article = articleListViewModel?.selectedArticle {
-                NSWorkspace.shared.open(article.url)
+            .onReceive(NotificationCenter.default.publisher(for: .showUnreadRequested)) { _ in
+                viewModel?.selectedSmartFolder = .unread
+                viewModel?.selectedFeed = nil
             }
-        }
+            .onReceive(NotificationCenter.default.publisher(for: .showStarredRequested)) { _ in
+                viewModel?.selectedSmartFolder = .starred
+                viewModel?.selectedFeed = nil
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showRecentRequested)) { _ in
+                viewModel?.selectedSmartFolder = .recent
+                viewModel?.selectedFeed = nil
+            }
+    }
+}
+
+struct ArticleActionModifier: ViewModifier {
+    let viewModel: ArticleListViewModel?
+    
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .markAllReadRequested)) { _ in
+                viewModel?.markAllAsRead()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .copyArticleLinkRequested)) { _ in
+                if let article = viewModel?.selectedArticle {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(article.url.absoluteString, forType: .string)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .shareArticleRequested)) { _ in
+                if let article = viewModel?.selectedArticle {
+                    let picker = NSSharingServicePicker(items: [article.url])
+                    if let view = NSApp.keyWindow?.contentView {
+                        picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
+                    }
+                }
+            }
+    }
+}
+
+struct FeedActionModifier: ViewModifier {
+    let viewModel: FeedListViewModel?
+    
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .refreshAllRequested)) { _ in
+                Task {
+                    await viewModel?.refreshAllFeeds()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .refreshSelectedRequested)) { _ in
+                if let feed = viewModel?.selectedFeed {
+                    Task {
+                        await viewModel?.refreshFeed(feed)
+                    }
+                }
+            }
     }
 }
 

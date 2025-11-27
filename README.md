@@ -56,15 +56,14 @@ A modern macOS RSS Reader app built with SwiftUI
 - Choose refresh frequency (5, 15, 30, 60 minutes)
 - Background timer-based refresh
 
-✅ **Keyboard Shortcuts**
-- `j` - Next article
-- `k` - Previous article
-- `u` - Toggle read/unread
-- `s` - Toggle star/unstar
-- `⌘N` - Add new feed
-- `⇧⌘N` - Add new folder
-- `⌘R` - Refresh all feeds
-- `⌘O` - Import OPML
+✅ **Enhanced Menu Bar & Keyboard Shortcuts**
+- **File Menu**: ⌘N (Add Feed), ⇧⌘N (Add Folder), ⌥⌘I (Import OPML), ⌥⌘E (Export OPML)
+- **Edit Menu**: ⌘A (Select All), ⌘D (Deselect All)
+- **View Menu**: ⌘1-4 (Smart Folders), ⌘F (Focus Search)
+- **Article Menu**: ⌘U (Toggle Read), ⌘S (Toggle Star), ⇧⌘M (Mark All Read), ⌘O (Open in Browser), ⇧⌘C (Copy Link), ⇧⌘S (Share)
+- **Feed Menu**: ⌘R (Refresh All), ⇧⌘R (Refresh Selected), ⌘E (Edit Feed), ⌘⌫ (Delete Feed)
+- Full native macOS menu bar with keyboard-driven navigation
+- Arrow keys for article navigation
 
 ✅ **OPML Import/Export**
 - Import feeds from other RSS readers
@@ -80,9 +79,9 @@ Sources/
 ├── SourcesApp.swift              # App entry point
 ├── Models/
 │   ├── Feed.swift                # RSS feed model
-│   ├── Article.swift             # Article model
+│   ├── Article.swift             # Article model with starred status
 │   ├── Folder.swift              # Feed folder organization
-│   ├── AppSettings.swift         # User preferences
+│   ├── AppSettings.swift         # User preferences & cache settings
 │   └── OPMLDocument.swift        # OPML file document
 ├── ViewModels/
 │   ├── FeedListViewModel.swift   # Feed management, OPML, folders
@@ -97,7 +96,8 @@ Sources/
     ├── FeedParser.swift          # RSS/Atom XML parsing
     ├── FeedFetcher.swift         # Network fetching
     ├── OPMLParser.swift          # OPML import parser
-    └── OPMLExporter.swift        # OPML export generator
+    ├── OPMLExporter.swift        # OPML export generator
+    └── CacheManager.swift        # Article cache with LRU eviction
 ```
 
 ## Requirements
@@ -168,7 +168,13 @@ Example feeds to try:
 
 ### Settings
 - Access via Sources → Settings or ⌘,
-- Enable auto-refresh and set interval (5-60 minutes)
+- **Auto-Refresh**: Enable auto-refresh and set interval (5-60 minutes)
+- **Cache Management**: 
+  - Set cache size limits (50MB - 1GB or unlimited)
+  - Set cache age limits (7-90 days or never expire)
+  - View cache statistics (size, article count, last cleanup)
+  - Clear cache manually with confirmation
+  - Automatic cache cleanup on app startup and settings changes
 - Settings persist across app launches
 
 ## Architecture
@@ -185,9 +191,9 @@ Example feeds to try:
 
 ### Phase 3 - Polish & Enhancements
 - [x] Starred/favorite articles
-- [ ] Article cache management
+- [x] Article cache management
+- [x] Enhanced macOS Menu Bar support
 - [ ] Feed update notifications
-- [ ] Podcast support
 - [ ] Performance optimizations for large feeds
 - [ ] Custom themes and appearance options
 - [ ] macOS integration (Spotlight, Handoff)
@@ -197,7 +203,7 @@ Example feeds to try:
 
 - No podcast/audio enclosure support yet
 - No iCloud sync
-- No article caching (requires network for images)
+- Article images still require network (only HTML content is cached)
 - Smart folder counts update on app restart
 
 ## License

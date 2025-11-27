@@ -262,6 +262,24 @@ struct SidebarView: View {
                 await viewModel.refreshAllFeeds()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .importOPMLRequested)) { _ in
+            showingImportPicker = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .exportOPMLRequested)) { _ in
+            showingExportPicker = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .editFeedRequested)) { _ in
+            // For now, show context menu actions via alert
+            if let feed = viewModel.selectedFeed {
+                // This would open an edit sheet in a full implementation
+                viewModel.errorMessage = "Edit feed: \(feed.title)"
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deleteFeedRequested)) { _ in
+            if let feed = viewModel.selectedFeed {
+                viewModel.deleteFeed(feed)
+            }
+        }
         .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("OK") {
                 viewModel.errorMessage = nil

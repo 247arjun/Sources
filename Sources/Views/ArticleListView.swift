@@ -184,6 +184,18 @@ struct ArticleListView: View {
                     viewModel.loadRecentArticles()
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .focusSearchRequested)) { _ in
+                // In a full implementation, this would focus the search field
+                // SwiftUI doesn't have a direct way to focus TextField on macOS
+            }
+    }
+}
+
+// Extension to allow notification handling from ArticleListView
+extension ArticleListView {
+    func handleSelectAllArticles() {
+        // This would be handled through the ArticleListViewModel
+        // For now, we'll leave this as a placeholder for future multi-select in article list
     }
 }
 
@@ -227,3 +239,5 @@ struct ArticleRow: View {
         .padding(.vertical, 4)
     }
 }
+
+

@@ -111,8 +111,18 @@ struct WebView: NSViewRepresentable {
     }
     
     func updateNSView(_ webView: WKWebView, context: Context) {
-        // Create HTML wrapper with styling
-        let html = """
+        // Try to load from cache first
+        Task {
+            let html = await loadContent()
+            await MainActor.run {
+                webView.loadHTMLString(html, baseURL: url)
+            }
+        }
+    }
+    
+    private func loadContent() async -> String {
+        // Create styled HTML wrapper
+        let styledHTML = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -172,6 +182,17 @@ struct WebView: NSViewRepresentable {
         </html>
         """
         
-        webView.loadHTMLString(html, baseURL: url)
+        // Generate article ID from URL
+        let articleID = url.absoluteString
+        
+        // Check if already cached
+        if let cached = await CacheManager.shared.getCachedArticle(id: articleID) {
+            return cached
+        }
+        
+        // Cache the content for next time
+        try? await CacheManager.shared.cacheArticle(id: articleID, html: styledHTML)
+        
+        return styledHTML
     }
 }
