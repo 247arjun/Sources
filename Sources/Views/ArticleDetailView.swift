@@ -64,6 +64,18 @@ struct ArticleDetailView: View {
                     }
                     
                     ToolbarItem(placement: .automatic) {
+                        Button(action: {
+                            viewModel.toggleStarred(article)
+                        }) {
+                            Label(
+                                article.isStarred ? "Unstar" : "Star",
+                                systemImage: article.isStarred ? "star.fill" : "star"
+                            )
+                        }
+                        .foregroundStyle(article.isStarred ? .yellow : .primary)
+                    }
+                    
+                    ToolbarItem(placement: .automatic) {
                         ShareLink(item: article.url) {
                             Label("Share", systemImage: "square.and.arrow.up")
                         }

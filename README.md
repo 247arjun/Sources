@@ -42,6 +42,7 @@ A modern macOS RSS Reader app built with SwiftUI
 ✅ **Smart Folders**
 - All Feeds - View all articles across feeds
 - Unread - Quick access to unread articles
+- Starred - Saved articles for later reference
 - Recent - Articles from last 1 day, 7 days, or custom date range
 
 ✅ **Full-Text Search**
@@ -59,6 +60,7 @@ A modern macOS RSS Reader app built with SwiftUI
 - `j` - Next article
 - `k` - Previous article
 - `u` - Toggle read/unread
+- `s` - Toggle star/unstar
 - `⌘N` - Add new feed
 - `⇧⌘N` - Add new folder
 - `⌘R` - Refresh all feeds
@@ -133,7 +135,14 @@ Example feeds to try:
 ### Smart Folders
 - **All Feeds**: View all articles from all feeds
 - **Unread**: Quick access to unread articles
+- **Starred**: View all starred/saved articles
 - **Recent**: Filter by date range (1 day, 7 days, or custom)
+
+### Starring Articles
+- **Star/Unstar**: Click star button in toolbar or press `s`
+- **Starred Folder**: Access all starred articles from smart folders
+- **Star Badge**: Yellow star indicator on starred articles in list
+- Starred status is independent of read/unread
 
 ### Searching
 - Use the search bar at the top of the article list
@@ -143,8 +152,8 @@ Example feeds to try:
 ### Reading Articles
 - Click on any article in the middle panel to view it
 - Articles are automatically marked as read when viewed
-- Use toolbar buttons to toggle read/unread, share, or open in browser
-- Navigate with keyboard: `j` (next), `k` (previous), `u` (toggle read)
+- Use toolbar buttons to toggle read/unread, star, share, or open in browser
+- Navigate with keyboard: `j` (next), `k` (previous), `u` (toggle read), `s` (toggle star)
 
 ### Filtering & Sorting
 - Use the **•••** menu in the article list to:
@@ -175,8 +184,7 @@ Example feeds to try:
 ## Roadmap
 
 ### Phase 3 - Polish & Enhancements
-- [ ] Reader mode for clean article viewing
-- [ ] Starred/favorite articles
+- [x] Starred/favorite articles
 - [ ] Article cache management
 - [ ] Feed update notifications
 - [ ] Podcast support

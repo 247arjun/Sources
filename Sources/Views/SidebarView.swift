@@ -73,6 +73,18 @@ struct SidebarView: View {
                 
                 Button(action: {
                     viewModel.selectedFeed = nil
+                    viewModel.selectedSmartFolder = .starred
+                }) {
+                    HStack {
+                        Image(systemName: "star.fill")
+                        Text("Starred")
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                Button(action: {
+                    viewModel.selectedFeed = nil
                     viewModel.selectedSmartFolder = .recent
                 }) {
                     HStack {

@@ -13,6 +13,7 @@ class FeedListViewModel {
     enum SmartFolder {
         case allFeeds
         case unread
+        case starred
         case recent
     }
     

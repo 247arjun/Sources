@@ -52,6 +52,8 @@ struct ContentView: View {
                             articleListViewModel.loadAllArticles()
                         case .unread:
                             articleListViewModel.loadUnreadArticles()
+                        case .starred:
+                            articleListViewModel.loadStarredArticles()
                         case .recent:
                             articleListViewModel.loadRecentArticles()
                         }
@@ -91,6 +93,11 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .toggleReadRequested)) { _ in
             if let article = articleListViewModel?.selectedArticle {
                 articleListViewModel?.toggleReadStatus(article)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleStarRequested)) { _ in
+            if let article = articleListViewModel?.selectedArticle {
+                articleListViewModel?.toggleStarred(article)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openInBrowserRequested)) { _ in

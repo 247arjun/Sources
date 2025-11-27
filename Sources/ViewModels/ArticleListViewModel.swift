@@ -79,6 +79,11 @@ class ArticleListViewModel {
         try? modelContext.save()
     }
     
+    func toggleStarred(_ article: Article) {
+        article.isStarred.toggle()
+        try? modelContext.save()
+    }
+    
     func markAsRead(_ article: Article) {
         article.isRead = true
         try? modelContext.save()
@@ -161,6 +166,41 @@ class ArticleListViewModel {
                 (article.summary?.localizedCaseInsensitiveContains(searchText) ?? false) ||
                 (article.author?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
+        }
+        
+        // Sort based on selected order
+        switch sortOrder {
+        case .dateDescending:
+            fetchedArticles.sort { $0.publishedDate > $1.publishedDate }
+        case .dateAscending:
+            fetchedArticles.sort { $0.publishedDate < $1.publishedDate }
+        case .titleAscending:
+            fetchedArticles.sort { $0.title < $1.title }
+        }
+        
+        articles = fetchedArticles
+    }
+    
+    func loadStarredArticles() {
+        let descriptor = FetchDescriptor<Article>(sortBy: [SortDescriptor(\.publishedDate, order: .reverse)])
+        var fetchedArticles = (try? modelContext.fetch(descriptor)) ?? []
+        
+        // Filter starred only
+        fetchedArticles = fetchedArticles.filter { $0.isStarred }
+        
+        // Filter by search text
+        if !searchText.isEmpty {
+            fetchedArticles = fetchedArticles.filter { article in
+                article.title.localizedCaseInsensitiveContains(searchText) ||
+                article.content.localizedCaseInsensitiveContains(searchText) ||
+                (article.summary?.localizedCaseInsensitiveContains(searchText) ?? false) ||
+                (article.author?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+        
+        // Filter if needed
+        if showUnreadOnly {
+            fetchedArticles = fetchedArticles.filter { !$0.isRead }
         }
         
         // Sort based on selected order

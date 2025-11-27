@@ -53,6 +53,11 @@ struct SourcesApp: App {
                 }
                 .keyboardShortcut("u", modifiers: [])
                 
+                Button("Toggle Star") {
+                    NotificationCenter.default.post(name: .toggleStarRequested, object: nil)
+                }
+                .keyboardShortcut("s", modifiers: [])
+                
                 Button("Open in Browser") {
                     NotificationCenter.default.post(name: .openInBrowserRequested, object: nil)
                 }
@@ -73,5 +78,6 @@ extension Notification.Name {
     static let nextArticleRequested = Notification.Name("nextArticleRequested")
     static let previousArticleRequested = Notification.Name("previousArticleRequested")
     static let toggleReadRequested = Notification.Name("toggleReadRequested")
+    static let toggleStarRequested = Notification.Name("toggleStarRequested")
     static let openInBrowserRequested = Notification.Name("openInBrowserRequested")
 }

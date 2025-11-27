@@ -24,6 +24,7 @@ struct ArticleListView: View {
             switch smartFolder {
             case .allFeeds: return "All Feeds"
             case .unread: return "Unread"
+            case .starred: return "Starred"
             case .recent: return "Recent"
             }
         }
@@ -161,6 +162,8 @@ struct ArticleListView: View {
                         viewModel.loadAllArticles()
                     case .unread:
                         viewModel.loadUnreadArticles()
+                    case .starred:
+                        viewModel.loadStarredArticles()
                     case .recent:
                         viewModel.loadRecentArticles()
                     }
@@ -209,6 +212,12 @@ struct ArticleRow: View {
                 }
                 
                 Spacer()
+                
+                if article.isStarred {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                }
                 
                 Text(article.publishedDate, style: .relative)
                     .font(.caption)
