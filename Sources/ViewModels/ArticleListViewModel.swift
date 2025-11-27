@@ -128,10 +128,36 @@ class ArticleListViewModel {
     }
     
     func loadAllArticles() {
-        let descriptor = FetchDescriptor<Article>(sortBy: [SortDescriptor(\.publishedDate, order: .reverse)])
+        // Build predicate for database-level filtering
+        var predicate: Predicate<Article>?
+        if showUnreadOnly {
+            predicate = #Predicate<Article> { article in
+                article.isRead == false
+            }
+        }
+        
+        // Build sort descriptor
+        let sortDescriptor: SortDescriptor<Article>
+        switch sortOrder {
+        case .dateDescending:
+            sortDescriptor = SortDescriptor(\.publishedDate, order: .reverse)
+        case .dateAscending:
+            sortDescriptor = SortDescriptor(\.publishedDate, order: .forward)
+        case .titleAscending:
+            sortDescriptor = SortDescriptor(\.title, order: .forward)
+        }
+        
+        var descriptor = FetchDescriptor<Article>(
+            predicate: predicate,
+            sortBy: [sortDescriptor]
+        )
+        
+        // Limit results for better performance (can load more on demand)
+        descriptor.fetchLimit = 1000
+        
         var fetchedArticles = (try? modelContext.fetch(descriptor)) ?? []
         
-        // Filter by search text
+        // Only do in-memory search filtering as a fallback (database can't do case-insensitive contains efficiently)
         if !searchText.isEmpty {
             fetchedArticles = fetchedArticles.filter { article in
                 article.title.localizedCaseInsensitiveContains(searchText) ||
@@ -139,34 +165,37 @@ class ArticleListViewModel {
                 (article.summary?.localizedCaseInsensitiveContains(searchText) ?? false) ||
                 (article.author?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
-        }
-        
-        // Filter if needed
-        if showUnreadOnly {
-            fetchedArticles = fetchedArticles.filter { !$0.isRead }
-        }
-        
-        // Sort based on selected order
-        switch sortOrder {
-        case .dateDescending:
-            fetchedArticles.sort { $0.publishedDate > $1.publishedDate }
-        case .dateAscending:
-            fetchedArticles.sort { $0.publishedDate < $1.publishedDate }
-        case .titleAscending:
-            fetchedArticles.sort { $0.title < $1.title }
         }
         
         articles = fetchedArticles
     }
     
     func loadUnreadArticles() {
-        let descriptor = FetchDescriptor<Article>(sortBy: [SortDescriptor(\.publishedDate, order: .reverse)])
+        // Use database predicate for efficient filtering
+        let predicate = #Predicate<Article> { article in
+            article.isRead == false
+        }
+        
+        // Build sort descriptor
+        let sortDescriptor: SortDescriptor<Article>
+        switch sortOrder {
+        case .dateDescending:
+            sortDescriptor = SortDescriptor(\.publishedDate, order: .reverse)
+        case .dateAscending:
+            sortDescriptor = SortDescriptor(\.publishedDate, order: .forward)
+        case .titleAscending:
+            sortDescriptor = SortDescriptor(\.title, order: .forward)
+        }
+        
+        var descriptor = FetchDescriptor<Article>(
+            predicate: predicate,
+            sortBy: [sortDescriptor]
+        )
+        descriptor.fetchLimit = 1000
+        
         var fetchedArticles = (try? modelContext.fetch(descriptor)) ?? []
         
-        // Filter unread only
-        fetchedArticles = fetchedArticles.filter { !$0.isRead }
-        
-        // Filter by search text
+        // Search filtering in memory
         if !searchText.isEmpty {
             fetchedArticles = fetchedArticles.filter { article in
                 article.title.localizedCaseInsensitiveContains(searchText) ||
@@ -174,29 +203,44 @@ class ArticleListViewModel {
                 (article.summary?.localizedCaseInsensitiveContains(searchText) ?? false) ||
                 (article.author?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
-        }
-        
-        // Sort based on selected order
-        switch sortOrder {
-        case .dateDescending:
-            fetchedArticles.sort { $0.publishedDate > $1.publishedDate }
-        case .dateAscending:
-            fetchedArticles.sort { $0.publishedDate < $1.publishedDate }
-        case .titleAscending:
-            fetchedArticles.sort { $0.title < $1.title }
         }
         
         articles = fetchedArticles
     }
     
     func loadStarredArticles() {
-        let descriptor = FetchDescriptor<Article>(sortBy: [SortDescriptor(\.publishedDate, order: .reverse)])
+        // Build predicate for starred articles
+        var predicate: Predicate<Article>
+        if showUnreadOnly {
+            predicate = #Predicate<Article> { article in
+                article.isStarred == true && article.isRead == false
+            }
+        } else {
+            predicate = #Predicate<Article> { article in
+                article.isStarred == true
+            }
+        }
+        
+        // Build sort descriptor
+        let sortDescriptor: SortDescriptor<Article>
+        switch sortOrder {
+        case .dateDescending:
+            sortDescriptor = SortDescriptor(\.publishedDate, order: .reverse)
+        case .dateAscending:
+            sortDescriptor = SortDescriptor(\.publishedDate, order: .forward)
+        case .titleAscending:
+            sortDescriptor = SortDescriptor(\.title, order: .forward)
+        }
+        
+        var descriptor = FetchDescriptor<Article>(
+            predicate: predicate,
+            sortBy: [sortDescriptor]
+        )
+        descriptor.fetchLimit = 1000
+        
         var fetchedArticles = (try? modelContext.fetch(descriptor)) ?? []
         
-        // Filter starred only
-        fetchedArticles = fetchedArticles.filter { $0.isStarred }
-        
-        // Filter by search text
+        // Search filtering in memory
         if !searchText.isEmpty {
             fetchedArticles = fetchedArticles.filter { article in
                 article.title.localizedCaseInsensitiveContains(searchText) ||
@@ -206,29 +250,11 @@ class ArticleListViewModel {
             }
         }
         
-        // Filter if needed
-        if showUnreadOnly {
-            fetchedArticles = fetchedArticles.filter { !$0.isRead }
-        }
-        
-        // Sort based on selected order
-        switch sortOrder {
-        case .dateDescending:
-            fetchedArticles.sort { $0.publishedDate > $1.publishedDate }
-        case .dateAscending:
-            fetchedArticles.sort { $0.publishedDate < $1.publishedDate }
-        case .titleAscending:
-            fetchedArticles.sort { $0.title < $1.title }
-        }
-        
         articles = fetchedArticles
     }
     
     func loadRecentArticles() {
-        let descriptor = FetchDescriptor<Article>(sortBy: [SortDescriptor(\.publishedDate, order: .reverse)])
-        var fetchedArticles = (try? modelContext.fetch(descriptor)) ?? []
-        
-        // Filter by recency
+        // Calculate date range
         let now = Date()
         let startDate: Date
         
@@ -242,9 +268,39 @@ class ArticleListViewModel {
         }
         
         let endDate = recencyFilter == .custom ? customEndDate : now
-        fetchedArticles = fetchedArticles.filter { $0.publishedDate >= startDate && $0.publishedDate <= endDate }
         
-        // Filter by search text
+        // Build predicate with date range filtering
+        var predicate: Predicate<Article>
+        if showUnreadOnly {
+            predicate = #Predicate<Article> { article in
+                article.publishedDate >= startDate && article.publishedDate <= endDate && article.isRead == false
+            }
+        } else {
+            predicate = #Predicate<Article> { article in
+                article.publishedDate >= startDate && article.publishedDate <= endDate
+            }
+        }
+        
+        // Build sort descriptor
+        let sortDescriptor: SortDescriptor<Article>
+        switch sortOrder {
+        case .dateDescending:
+            sortDescriptor = SortDescriptor(\.publishedDate, order: .reverse)
+        case .dateAscending:
+            sortDescriptor = SortDescriptor(\.publishedDate, order: .forward)
+        case .titleAscending:
+            sortDescriptor = SortDescriptor(\.title, order: .forward)
+        }
+        
+        var descriptor = FetchDescriptor<Article>(
+            predicate: predicate,
+            sortBy: [sortDescriptor]
+        )
+        descriptor.fetchLimit = 1000
+        
+        var fetchedArticles = (try? modelContext.fetch(descriptor)) ?? []
+        
+        // Search filtering in memory
         if !searchText.isEmpty {
             fetchedArticles = fetchedArticles.filter { article in
                 article.title.localizedCaseInsensitiveContains(searchText) ||
@@ -252,21 +308,6 @@ class ArticleListViewModel {
                 (article.summary?.localizedCaseInsensitiveContains(searchText) ?? false) ||
                 (article.author?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
-        }
-        
-        // Filter if needed
-        if showUnreadOnly {
-            fetchedArticles = fetchedArticles.filter { !$0.isRead }
-        }
-        
-        // Sort based on selected order
-        switch sortOrder {
-        case .dateDescending:
-            fetchedArticles.sort { $0.publishedDate > $1.publishedDate }
-        case .dateAscending:
-            fetchedArticles.sort { $0.publishedDate < $1.publishedDate }
-        case .titleAscending:
-            fetchedArticles.sort { $0.title < $1.title }
         }
         
         articles = fetchedArticles

@@ -12,6 +12,7 @@ struct ArticleListView: View {
     let feed: Feed?
     
     @Bindable var feedListViewModel: FeedListViewModel
+    @State private var searchTask: Task<Void, Never>?
     
     private var hasContent: Bool {
         feed != nil || feedListViewModel.selectedSmartFolder != nil
@@ -154,18 +155,25 @@ struct ArticleListView: View {
                 viewModel.loadArticles(for: feed)
             }
             .onChange(of: viewModel.searchText) {
-                if let feed = feed {
-                    viewModel.loadArticles(for: feed)
-                } else if let smartFolder = feedListViewModel.selectedSmartFolder {
-                    switch smartFolder {
-                    case .allFeeds:
-                        viewModel.loadAllArticles()
-                    case .unread:
-                        viewModel.loadUnreadArticles()
-                    case .starred:
-                        viewModel.loadStarredArticles()
-                    case .recent:
-                        viewModel.loadRecentArticles()
+                // Debounce search to avoid excessive queries while typing
+                searchTask?.cancel()
+                searchTask = Task {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    guard !Task.isCancelled else { return }
+                    
+                    if let feed = feed {
+                        viewModel.loadArticles(for: feed)
+                    } else if let smartFolder = feedListViewModel.selectedSmartFolder {
+                        switch smartFolder {
+                        case .allFeeds:
+                            viewModel.loadAllArticles()
+                        case .unread:
+                            viewModel.loadUnreadArticles()
+                        case .starred:
+                            viewModel.loadStarredArticles()
+                        case .recent:
+                            viewModel.loadRecentArticles()
+                        }
                     }
                 }
             }

@@ -10,7 +10,7 @@ import SwiftData
 
 @Model
 final class Article {
-    var id: String
+    @Attribute(.unique) var id: String
     var title: String
     var author: String?
     var content: String

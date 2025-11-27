@@ -148,12 +148,13 @@ Example feeds to try:
 - Use the search bar at the top of the article list
 - Searches across titles, content, summaries, and authors
 - Works with feeds and smart folders
+- Debounced search (300ms) for optimal performance
 
 ### Reading Articles
 - Click on any article in the middle panel to view it
 - Articles are automatically marked as read when viewed
 - Use toolbar buttons to toggle read/unread, star, share, or open in browser
-- Navigate with keyboard: `j` (next), `k` (previous), `u` (toggle read), `s` (toggle star)
+- Navigate with arrow keys or use keyboard shortcuts: ⌘U (toggle read), ⌘S (toggle star)
 
 ### Filtering & Sorting
 - Use the **•••** menu in the article list to:
@@ -187,17 +188,27 @@ Example feeds to try:
 
 **RSS/Atom Support**: Custom XML parser supporting both feed formats
 
+**Performance Optimizations**: Database-level predicates, search debouncing, query limits, optimized image loading
+
 ## Roadmap
 
 ### Phase 3 - Polish & Enhancements
 - [x] Starred/favorite articles
 - [x] Article cache management
 - [x] Enhanced macOS Menu Bar support
+- [x] Performance optimizations for large feeds
 - [ ] Feed update notifications
-- [ ] Performance optimizations for large feeds
 - [ ] Custom themes and appearance options
 - [ ] macOS integration (Spotlight, Handoff)
 - [ ] iCloud sync
+
+## Performance
+
+- Database-level predicate filtering for efficient queries
+- 300ms search debouncing to reduce query load while typing
+- Fetch limit of 1000 articles per view for optimal memory usage
+- Optimized image loading with proper phase handling and fallbacks
+- Unique constraint on Article IDs to prevent duplicates
 
 ## Known Limitations
 
@@ -205,6 +216,7 @@ Example feeds to try:
 - No iCloud sync
 - Article images still require network (only HTML content is cached)
 - Smart folder counts update on app restart
+- Text search uses in-memory filtering (database can't efficiently do case-insensitive contains)
 
 ## License
 

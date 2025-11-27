@@ -350,13 +350,22 @@ struct FeedRow: View {
     var body: some View {
         HStack {
             if let imageURL = feed.imageURL {
-                AsyncImage(url: imageURL) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image(systemName: "newspaper")
-                        .foregroundStyle(.secondary)
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    case .failure:
+                        Image(systemName: "newspaper")
+                            .foregroundStyle(.secondary)
+                    case .empty:
+                        ProgressView()
+                            .scaleEffect(0.5)
+                    @unknown default:
+                        Image(systemName: "newspaper")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(width: 20, height: 20)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
