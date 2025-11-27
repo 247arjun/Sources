@@ -59,6 +59,20 @@ class AppSettings {
         }
     }
     
+    enum ExcerptLength: Int, CaseIterable {
+        case none = 0
+        case oneLine = 1
+        case twoLines = 2
+        
+        var displayName: String {
+            switch self {
+            case .none: return "None"
+            case .oneLine: return "1 line"
+            case .twoLines: return "2 lines"
+            }
+        }
+    }
+    
     var autoRefreshEnabled: Bool {
         didSet {
             UserDefaults.standard.set(autoRefreshEnabled, forKey: "autoRefreshEnabled")
@@ -83,6 +97,12 @@ class AppSettings {
         }
     }
     
+    var excerptLength: ExcerptLength {
+        didSet {
+            UserDefaults.standard.set(excerptLength.rawValue, forKey: "excerptLength")
+        }
+    }
+    
     init() {
         self.autoRefreshEnabled = UserDefaults.standard.object(forKey: "autoRefreshEnabled") as? Bool ?? false
         self.refreshInterval = UserDefaults.standard.object(forKey: "refreshInterval") as? TimeInterval ?? 3600 // 1 hour default
@@ -92,6 +112,9 @@ class AppSettings {
         
         let cacheAgeValue = UserDefaults.standard.object(forKey: "cacheAge") as? Int ?? 30
         self.cacheAge = CacheAge(rawValue: cacheAgeValue) ?? .days30
+        
+        let excerptValue = UserDefaults.standard.object(forKey: "excerptLength") as? Int ?? 2
+        self.excerptLength = ExcerptLength(rawValue: excerptValue) ?? .twoLines
     }
     
     var refreshIntervalMinutes: Int {

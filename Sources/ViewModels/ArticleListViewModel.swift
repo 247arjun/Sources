@@ -74,6 +74,46 @@ class ArticleListViewModel {
         articles = fetchedArticles
     }
     
+    func loadArticles(for folder: Folder?) {
+        guard let folder = folder else {
+            loadAllArticles()
+            return
+        }
+        
+        // Get all articles from all feeds in the folder
+        var fetchedArticles: [Article] = []
+        for feed in folder.feeds {
+            fetchedArticles.append(contentsOf: feed.articles)
+        }
+        
+        // Filter by search text
+        if !searchText.isEmpty {
+            fetchedArticles = fetchedArticles.filter { article in
+                article.title.localizedCaseInsensitiveContains(searchText) ||
+                article.content.localizedCaseInsensitiveContains(searchText) ||
+                (article.summary?.localizedCaseInsensitiveContains(searchText) ?? false) ||
+                (article.author?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+        
+        // Filter if needed
+        if showUnreadOnly {
+            fetchedArticles = fetchedArticles.filter { !$0.isRead }
+        }
+        
+        // Sort based on selected order
+        switch sortOrder {
+        case .dateDescending:
+            fetchedArticles.sort { $0.publishedDate > $1.publishedDate }
+        case .dateAscending:
+            fetchedArticles.sort { $0.publishedDate < $1.publishedDate }
+        case .titleAscending:
+            fetchedArticles.sort { $0.title < $1.title }
+        }
+        
+        articles = fetchedArticles
+    }
+    
     func toggleReadStatus(_ article: Article) {
         article.isRead.toggle()
         try? modelContext.save()

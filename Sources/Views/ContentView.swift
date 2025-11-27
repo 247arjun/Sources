@@ -43,7 +43,8 @@ struct ContentView: View {
                     ArticleListView(
                         viewModel: articleListViewModel,
                         feed: feedListViewModel.selectedFeed,
-                        feedListViewModel: feedListViewModel
+                        feedListViewModel: feedListViewModel,
+                        settings: settings
                     )
                     .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
                 } detail: {
@@ -55,12 +56,17 @@ struct ContentView: View {
                     .navigationSplitViewColumnWidth(min: 400, ideal: 600)
                 }
                 .onChange(of: feedListViewModel.selectedFeed) { oldValue, newValue in
+                    if newValue != nil {
+                        feedListViewModel.selectedFolder = nil
+                        feedListViewModel.selectedSmartFolder = nil
+                    }
                     articleListViewModel.loadArticles(for: newValue)
                     articleListViewModel.selectedArticle = nil
                 }
                 .onChange(of: feedListViewModel.selectedSmartFolder) { oldValue, newValue in
                     if let smartFolder = newValue {
                         feedListViewModel.selectedFeed = nil
+                        feedListViewModel.selectedFolder = nil
                         switch smartFolder {
                         case .allFeeds:
                             articleListViewModel.loadAllArticles()
@@ -71,6 +77,14 @@ struct ContentView: View {
                         case .recent:
                             articleListViewModel.loadRecentArticles()
                         }
+                        articleListViewModel.selectedArticle = nil
+                    }
+                }
+                .onChange(of: feedListViewModel.selectedFolder) { oldValue, newValue in
+                    if let folder = newValue {
+                        feedListViewModel.selectedFeed = nil
+                        feedListViewModel.selectedSmartFolder = nil
+                        articleListViewModel.loadArticles(for: folder)
                         articleListViewModel.selectedArticle = nil
                     }
                 }

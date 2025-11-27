@@ -132,15 +132,23 @@ struct SidebarView: View {
                             }
                     }
                 } label: {
-                    HStack {
-                        Text(folder.name)
-                        Spacer()
-                        if folder.unreadCount > 0 {
-                            Text("\(folder.unreadCount)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    Button(action: {
+                        viewModel.selectedFeed = nil
+                        viewModel.selectedSmartFolder = nil
+                        viewModel.selectedFolder = folder
+                    }) {
+                        HStack {
+                            Text(folder.name)
+                                .foregroundStyle(viewModel.selectedFolder == folder ? Color.accentColor : .primary)
+                            Spacer()
+                            if folder.unreadCount > 0 {
+                                Text("\(folder.unreadCount)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
                     .contentShape(Rectangle())
                     .contextMenu {
                         Button("Mark All as Read") {

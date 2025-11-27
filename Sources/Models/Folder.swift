@@ -9,10 +9,14 @@ import Foundation
 import SwiftData
 
 @Model
-final class Folder {
+final class Folder: Equatable {
     var id: UUID
     var name: String
     var sortOrder: Int
+    
+    static func == (lhs: Folder, rhs: Folder) -> Bool {
+        lhs.id == rhs.id
+    }
     
     @Relationship(deleteRule: .nullify, inverse: \Feed.folder)
     var feeds: [Feed] = []

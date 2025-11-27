@@ -99,9 +99,23 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            
+            Section {
+                Picker("Excerpt length:", selection: $settings.excerptLength) {
+                    ForEach(AppSettings.ExcerptLength.allCases, id: \.self) { length in
+                        Text(length.displayName).tag(length)
+                    }
+                }
+            } header: {
+                Text("Article List Appearance")
+            } footer: {
+                Text("Control how many lines of article preview text are shown in the article list.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 500, height: 500)
+        .frame(width: 500, height: 550)
         .task {
             await loadCacheStats()
         }

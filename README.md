@@ -126,8 +126,9 @@ Example feeds to try:
 
 ### Managing Feeds & Folders
 - **Add Folder**: Click **+** → Add Folder or press ⇧⌘N
+- **View Folder Contents**: Click on folder name to see unified list of all articles from contained feeds
 - **Move to Folder**: Right-click feed → Move to Folder
-- **Collapse Folders**: Click disclosure triangle to collapse/expand folders (reduces scrolling)
+- **Collapse Folders**: Click disclosure triangle to collapse/expand folders (state persists across app launches)
 - **Multi-Select**: Click **+** → Select Feeds, then ⌘-click to select multiple
 - **Bulk Move/Delete**: Select multiple feeds, right-click for bulk actions
 - **Mark All as Read**: Right-click on folders, feeds, or smart folders for bulk mark as read
@@ -138,7 +139,7 @@ Example feeds to try:
 - **All Feeds**: View all articles from all feeds
 - **Unread**: Quick access to unread articles
 - **Starred**: View all starred/saved articles
-- **Recent**: Filter by date range (1 day, 7 days, or custom)
+- **Recent**: Filter by date range with segmented tabs (1 day, 7 days, or custom date range)
 
 ### Starring Articles
 - **Star/Unstar**: Click star button in toolbar or press `s`
@@ -159,10 +160,10 @@ Example feeds to try:
 - Navigate with arrow keys or use keyboard shortcuts: ⌘U (toggle read), ⌘S (toggle star)
 
 ### Filtering & Sorting
-- Use the **•••** menu in the article list to:
-  - Sort by newest first, oldest first, or title
-  - Toggle "Unread Only" filter
-- Click **Mark All Read** to mark all articles as read
+- **Sort**: Click sort icon in toolbar to choose newest first, oldest first, or by title
+- **Unread Filter**: Click circle icon in toolbar to toggle unread-only view (turns blue when active)
+- **Mark All Read**: Click checkmark icon in toolbar
+- **Date Grouping**: Articles automatically grouped by "Today", "Yesterday", and specific dates
 
 ### OPML Import/Export
 - **Import**: Click **+** → Import OPML (⌘O)
@@ -178,6 +179,8 @@ Example feeds to try:
   - View cache statistics (size, article count, last cleanup)
   - Clear cache manually with confirmation
   - Automatic cache cleanup on app startup and settings changes
+- **Article List Appearance**:
+  - Set excerpt length (None, 1 line, or 2 lines of preview text)
 - Settings persist across app launches
 
 ## Architecture
@@ -199,7 +202,11 @@ Example feeds to try:
 - [x] Article cache management
 - [x] Enhanced macOS Menu Bar support
 - [x] Performance optimizations for large feeds
-- [x] Collapsible folders and Mark All as Read
+- [x] Collapsible folders with persistent state
+- [x] Clickable folders for unified article view
+- [x] Mark All as Read (folders, feeds, smart folders)
+- [x] Enhanced article list UI (date grouping, exposed filters, feed names)
+- [x] Customizable excerpt length
 - [ ] Feed update notifications
 - [ ] Custom themes and appearance options
 - [ ] macOS integration (Spotlight, Handoff)

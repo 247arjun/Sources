@@ -20,11 +20,16 @@ class FeedListViewModel {
     var feeds: [Feed] = []
     var folders: [Folder] = []
     var selectedFeed: Feed?
+    var selectedFolder: Folder?
     var selectedFeeds: Set<Feed> = []
     var selectedSmartFolder: SmartFolder?
     var isRefreshing = false
     var errorMessage: String?
-    var collapsedFolders: Set<Folder.ID> = []
+    var collapsedFolders: Set<Folder.ID> = [] {
+        didSet {
+            saveCollapsedState()
+        }
+    }
     
     private let modelContext: ModelContext
     private let fetcher: FeedFetcher
@@ -34,6 +39,7 @@ class FeedListViewModel {
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         self.fetcher = FeedFetcher()
+        loadCollapsedState()
     }
     
     func startAutoRefresh(with settings: AppSettings) {
@@ -409,5 +415,18 @@ class FeedListViewModel {
         // For simplicity, mark all articles as read since we don't have easy access to recency filter here
         // In a production app, you'd pass the date range or calculate it
         markAllAsReadInAllFeeds()
+    }
+    
+    // MARK: - Collapsed State Persistence
+    
+    private func saveCollapsedState() {
+        let collapsedIDs = Array(collapsedFolders).map { $0.uuidString }
+        UserDefaults.standard.set(collapsedIDs, forKey: "collapsedFolders")
+    }
+    
+    private func loadCollapsedState() {
+        if let savedIDs = UserDefaults.standard.array(forKey: "collapsedFolders") as? [String] {
+            collapsedFolders = Set(savedIDs.compactMap { UUID(uuidString: $0) })
+        }
     }
 }

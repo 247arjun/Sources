@@ -12,15 +12,49 @@ struct ArticleListView: View {
     let feed: Feed?
     
     @Bindable var feedListViewModel: FeedListViewModel
+    var settings: AppSettings
     @State private var searchTask: Task<Void, Never>?
     
     private var hasContent: Bool {
-        feed != nil || feedListViewModel.selectedSmartFolder != nil
+        feed != nil || feedListViewModel.selectedSmartFolder != nil || feedListViewModel.selectedFolder != nil
+    }
+    
+    private var groupedArticles: [Date: [Article]] {
+        Dictionary(grouping: viewModel.articles) { article in
+            Calendar.current.startOfDay(for: article.publishedDate)
+        }
+    }
+    
+    private func sectionTitle(for date: Date) -> String {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let articleDate = calendar.startOfDay(for: date)
+        
+        if articleDate == today {
+            return "Today"
+        } else if articleDate == calendar.date(byAdding: .day, value: -1, to: today) {
+            return "Yesterday"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            return formatter.string(from: date)
+        }
+    }
+    
+    private var sortIcon: String {
+        switch viewModel.sortOrder {
+        case .dateDescending: return "arrow.down"
+        case .dateAscending: return "arrow.up"
+        case .titleAscending: return "textformat"
+        }
     }
     
     private var navigationTitle: String {
         if let feed = feed {
             return feed.title
+        } else if let folder = feedListViewModel.selectedFolder {
+            return folder.name
         } else if let smartFolder = feedListViewModel.selectedSmartFolder {
             switch smartFolder {
             case .allFeeds: return "All Feeds"
@@ -64,95 +98,107 @@ struct ArticleListView: View {
             Divider()
             
             List(selection: $viewModel.selectedArticle) {
-                ForEach(viewModel.articles) { article in
-                    ArticleRow(article: article)
-                        .tag(article)
-                        .contextMenu {
-                            Button(article.isRead ? "Mark as Unread" : "Mark as Read") {
-                                viewModel.toggleReadStatus(article)
-                            }
+                ForEach(groupedArticles.keys.sorted(by: >), id: \.self) { date in
+                    Section(header: Text(sectionTitle(for: date))) {
+                        ForEach(groupedArticles[date] ?? []) { article in
+                            ArticleRow(article: article, excerptLines: settings.excerptLength.rawValue)
+                                .tag(article)
+                                .contextMenu {
+                                    Button(article.isRead ? "Mark as Unread" : "Mark as Read") {
+                                        viewModel.toggleReadStatus(article)
+                                    }
+                                }
                         }
+                    }
                 }
             }
         }
         .navigationTitle(navigationTitle)
-        .toolbar {
-            if feedListViewModel.selectedSmartFolder == .recent {
-                ToolbarItem(placement: .automatic) {
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 8) {
+                // Recency filter tabs (only for Recent smart folder)
+                if feedListViewModel.selectedSmartFolder == .recent {
                     Picker("Time Range", selection: $viewModel.recencyFilter) {
                         ForEach(ArticleListViewModel.RecencyFilter.allCases, id: \.self) { filter in
                             Text(filter.rawValue).tag(filter)
                         }
                     }
-                    .pickerStyle(.menu)
-                }
-                
-                if viewModel.recencyFilter == .custom {
-                    ToolbarItem(placement: .automatic) {
-                        HStack(alignment: .center, spacing: 8) {
-                            Text("From")
-                                .foregroundStyle(.secondary)
-                                .font(.subheadline)
-                                .fixedSize()
-                                .padding(.leading, 8)
-                            DatePicker("", selection: $viewModel.customStartDate, displayedComponents: [.date])
-                                .datePickerStyle(.field)
-                                .labelsHidden()
-                                .fixedSize()
-                        }
-                        .frame(height: 28)
-                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
                     
-                    ToolbarItem(placement: .automatic) {
-                        HStack(alignment: .center, spacing: 8) {
-                            Text("To")
-                                .foregroundStyle(.secondary)
-                                .font(.subheadline)
-                                .fixedSize()
-                                .padding(.leading, 8)
-                            DatePicker("", selection: $viewModel.customEndDate, displayedComponents: [.date])
-                                .datePickerStyle(.field)
-                                .labelsHidden()
-                                .fixedSize()
-                                .padding(.trailing, 8)
-                        }
-                        .frame(height: 28)
-                    }
-                }
-            }
-            
-            ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            Picker("Sort", selection: $viewModel.sortOrder) {
-                                Text("Newest First").tag(ArticleListViewModel.SortOrder.dateDescending)
-                                Text("Oldest First").tag(ArticleListViewModel.SortOrder.dateAscending)
-                                Text("Title").tag(ArticleListViewModel.SortOrder.titleAscending)
+                    if viewModel.recencyFilter == .custom {
+                        HStack(spacing: 12) {
+                            HStack(spacing: 8) {
+                                Text("From")
+                                    .foregroundStyle(.secondary)
+                                    .font(.subheadline)
+                                DatePicker("", selection: $viewModel.customStartDate, displayedComponents: [.date])
+                                    .datePickerStyle(.field)
+                                    .labelsHidden()
                             }
                             
-                            Divider()
-                            
-                            Toggle("Unread Only", isOn: $viewModel.showUnreadOnly)
-                        } label: {
-                            Label("Options", systemImage: "ellipsis.circle")
+                            HStack(spacing: 8) {
+                                Text("To")
+                                    .foregroundStyle(.secondary)
+                                    .font(.subheadline)
+                                DatePicker("", selection: $viewModel.customEndDate, displayedComponents: [.date])
+                                    .datePickerStyle(.field)
+                                    .labelsHidden()
+                            }
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 4)
+                    }
                 }
                 
-                ToolbarItem(placement: .automatic) {
+                // Filter and sort toolbar
+                HStack(spacing: 12) {
+                    // Sort picker
+                    Menu {
+                        Picker("Sort", selection: $viewModel.sortOrder) {
+                            Label("Newest First", systemImage: "arrow.down").tag(ArticleListViewModel.SortOrder.dateDescending)
+                            Label("Oldest First", systemImage: "arrow.up").tag(ArticleListViewModel.SortOrder.dateAscending)
+                            Label("Title", systemImage: "textformat").tag(ArticleListViewModel.SortOrder.titleAscending)
+                        }
+                    } label: {
+                        Label("Sort", systemImage: sortIcon)
+                            .labelStyle(.iconOnly)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    
+                    // Unread toggle
+                    Toggle(isOn: $viewModel.showUnreadOnly) {
+                        Label("Unread Only", systemImage: "circle.fill")
+                            .labelStyle(.iconOnly)
+                    }
+                    .toggleStyle(.button)
+                    .tint(viewModel.showUnreadOnly ? .blue : .gray)
+                    
+                    Spacer()
+                    
+                    // Mark all as read
                     Button(action: {
                         if let feed = feed {
                             viewModel.markAllAsRead(for: feed)
                         }
                     }) {
                         Label("Mark All Read", systemImage: "checkmark.circle")
+                            .labelStyle(.iconOnly)
                     }
                     .disabled(viewModel.articles.isEmpty)
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
             }
+            .background(.background)
+        }
             .onChange(of: viewModel.sortOrder) {
-                viewModel.loadArticles(for: feed)
+                reloadArticles()
             }
             .onChange(of: viewModel.showUnreadOnly) {
-                viewModel.loadArticles(for: feed)
+                reloadArticles()
             }
             .onChange(of: viewModel.searchText) {
                 // Debounce search to avoid excessive queries while typing
@@ -205,10 +251,30 @@ extension ArticleListView {
         // This would be handled through the ArticleListViewModel
         // For now, we'll leave this as a placeholder for future multi-select in article list
     }
+    
+    func reloadArticles() {
+        if let feed = feed {
+            viewModel.loadArticles(for: feed)
+        } else if let folder = feedListViewModel.selectedFolder {
+            viewModel.loadArticles(for: folder)
+        } else if let smartFolder = feedListViewModel.selectedSmartFolder {
+            switch smartFolder {
+            case .allFeeds:
+                viewModel.loadAllArticles()
+            case .unread:
+                viewModel.loadUnreadArticles()
+            case .starred:
+                viewModel.loadStarredArticles()
+            case .recent:
+                viewModel.loadRecentArticles()
+            }
+        }
+    }
 }
 
 struct ArticleRow: View {
     let article: Article
+    var excerptLines: Int
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -217,16 +283,22 @@ struct ArticleRow: View {
                 .fontWeight(article.isRead ? .regular : .bold)
                 .foregroundStyle(article.isRead ? .secondary : .primary)
             
-            if let summary = article.summary {
+            if excerptLines > 0, let summary = article.summary {
                 Text(summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(excerptLines)
             }
             
             HStack {
+                if let feedTitle = article.feed?.title {
+                    Text(feedTitle)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                
                 if let author = article.author {
-                    Text(author)
+                    Text("• \(author)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
