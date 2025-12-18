@@ -19,6 +19,10 @@ class ArticleListViewModel {
     var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     var customEndDate: Date = Date()
     
+    // AI Summarization state
+    var isSummarizing = false
+    var summarizationError: String?
+    
     enum RecencyFilter: String, CaseIterable {
         case oneDay = "1 day"
         case sevenDays = "7 days"
@@ -26,6 +30,7 @@ class ArticleListViewModel {
     }
     
     private let modelContext: ModelContext
+    private let summarizer = ArticleSummarizer.shared
     
     enum SortOrder {
         case dateDescending
@@ -355,5 +360,51 @@ class ArticleListViewModel {
         }
         
         articles = fetchedArticles
+    }
+    
+    // MARK: - AI Summarization
+    
+    /// Check if AI summarization is available
+    var isSummarizationAvailable: Bool {
+        summarizer.isAvailable
+    }
+    
+    /// Get availability message for UI display
+    var summarizationAvailabilityMessage: String {
+        summarizer.availabilityMessage()
+    }
+    
+    /// Generate AI summary for an article
+    func generateSummary(for article: Article) async {
+        isSummarizing = true
+        summarizationError = nil
+        
+        do {
+            // Extract text from article content (which may be HTML)
+            let plainText = summarizer.extractPlainText(from: article.content)
+            
+            // Generate the summary
+            let summary = try await summarizer.generateSummary(for: plainText)
+            
+            // Store the summary in the article
+            await MainActor.run {
+                article.aiSummary = summary
+                article.aiSummaryGeneratedDate = Date()
+                try? modelContext.save()
+                isSummarizing = false
+            }
+        } catch {
+            await MainActor.run {
+                summarizationError = error.localizedDescription
+                isSummarizing = false
+            }
+        }
+    }
+    
+    /// Clear the AI summary for an article
+    func clearSummary(for article: Article) {
+        article.aiSummary = nil
+        article.aiSummaryGeneratedDate = nil
+        try? modelContext.save()
     }
 }

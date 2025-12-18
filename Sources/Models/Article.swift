@@ -20,6 +20,10 @@ final class Article {
     var isRead: Bool
     var isStarred: Bool
     
+    // AI-generated summary
+    var aiSummary: String?
+    var aiSummaryGeneratedDate: Date?
+    
     var feed: Feed?
     
     init(
@@ -44,5 +48,7 @@ final class Article {
         self.isRead = isRead
         self.isStarred = isStarred
         self.feed = feed
+        self.aiSummary = nil
+        self.aiSummaryGeneratedDate = nil
     }
 }

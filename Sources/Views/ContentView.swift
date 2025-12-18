@@ -103,6 +103,11 @@ struct ContentView: View {
             feedListViewModel = FeedListViewModel(modelContext: modelContext)
             feedListViewModel?.loadFeeds()
             feedListViewModel?.startAutoRefresh(with: settings)
+            
+            // Notify app that viewModel is ready
+            if let viewModel = feedListViewModel {
+                NotificationCenter.default.post(name: .feedListViewModelReady, object: viewModel)
+            }
         }
         if articleListViewModel == nil {
             articleListViewModel = ArticleListViewModel(modelContext: modelContext)

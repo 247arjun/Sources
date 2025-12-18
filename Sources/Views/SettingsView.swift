@@ -9,10 +9,15 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var settings: AppSettings
+    var viewModel: FeedListViewModel?
+    
     @State private var cacheSize: Int64 = 0
     @State private var cachedArticleCount: Int = 0
     @State private var lastCleanup: Date = Date()
     @State private var showingClearConfirmation = false
+    @State private var showingCleanupConfirmation = false
+    @State private var isPerformingCleanup = false
+    @State private var cleanupResult: CleanupResult?
     
     var body: some View {
         Form {
@@ -56,7 +61,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Current cache size:")
                         Spacer()
-                        Text(CacheManager.shared.formatSize(cacheSize))
+                        Text(formatSize(cacheSize))
                             .foregroundStyle(.secondary)
                     }
                     
@@ -113,9 +118,60 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Remove duplicate feeds and folders, and clean up feeds that are no longer accessible.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    if let result = cleanupResult {
+                        HStack {
+                            Image(systemName: result.totalItemsRemoved > 0 ? "checkmark.circle.fill" : "info.circle.fill")
+                                .foregroundStyle(result.totalItemsRemoved > 0 ? .green : .blue)
+                            Text(result.summary)
+                                .font(.subheadline)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    
+                    Button(action: {
+                        showingCleanupConfirmation = true
+                    }) {
+                        HStack {
+                            if isPerformingCleanup {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .padding(.trailing, 4)
+                            }
+                            Text(isPerformingCleanup ? "Cleaning Up..." : "Run Cleanup")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .disabled(isPerformingCleanup || viewModel == nil)
+                    .confirmationDialog(
+                        "Run cleanup operation?",
+                        isPresented: $showingCleanupConfirmation,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Run Cleanup") {
+                            performCleanup()
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This will:\n• Remove duplicate feeds and folders\n• Test all feeds (3 retries each)\n• Remove feeds that fail to load\n\nThis may take a few minutes.")
+                    }
+                }
+            } header: {
+                Text("Feed Cleanup")
+            } footer: {
+                Text("Tests each feed with 3 retry attempts before removing. Duplicate feeds and folders will be merged.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 500, height: 550)
+        .frame(width: 500, height: 650)
         .task {
             await loadCacheStats()
         }
@@ -126,5 +182,27 @@ struct SettingsView: View {
         cacheSize = stats.size
         cachedArticleCount = stats.count
         lastCleanup = stats.lastCleanup
+    }
+    
+    private func performCleanup() {
+        guard let viewModel = viewModel else { return }
+        
+        isPerformingCleanup = true
+        cleanupResult = nil
+        
+        Task {
+            let result = await viewModel.performCleanup()
+            
+            await MainActor.run {
+                cleanupResult = result
+                isPerformingCleanup = false
+            }
+        }
+    }
+    
+    private func formatSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
 }

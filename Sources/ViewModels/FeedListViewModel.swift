@@ -335,17 +335,34 @@ class FeedListViewModel {
     private func processOPMLOutlines(_ outlines: [OPMLOutline], parentFolder: Folder?) async {
         for outline in outlines {
             if outline.isFolder {
-                // Create folder
-                await MainActor.run {
-                    let folder = Folder(name: outline.title, sortOrder: folders.count)
-                    modelContext.insert(folder)
-                    try? modelContext.save()
-                    
-                    // Process children
-                    Task {
-                        await processOPMLOutlines(outline.children, parentFolder: folder)
+                // Check if folder already exists
+                let folderDescriptor = FetchDescriptor<Folder>()
+                let existingFolder = await MainActor.run {
+                    do {
+                        let allFolders = try modelContext.fetch(folderDescriptor)
+                        return allFolders.first(where: { $0.name == outline.title })
+                    } catch {
+                        return nil
                     }
                 }
+                
+                let folderToUse: Folder
+                if let existingFolder = existingFolder {
+                    // Use existing folder
+                    folderToUse = existingFolder
+                } else {
+                    // Create new folder
+                    folderToUse = await MainActor.run {
+                        let folder = Folder(name: outline.title, sortOrder: folders.count)
+                        modelContext.insert(folder)
+                        try? modelContext.save()
+                        return folder
+                    }
+                }
+                
+                // Process children with the folder (existing or new)
+                await processOPMLOutlines(outline.children, parentFolder: folderToUse)
+                
             } else if let xmlUrlString = outline.xmlUrl, let xmlUrl = URL(string: xmlUrlString) {
                 // Check if feed already exists using fresh fetch
                 let feedDescriptor = FetchDescriptor<Feed>()
@@ -475,6 +492,170 @@ class FeedListViewModel {
     private func loadCollapsedState() {
         if let savedIDs = UserDefaults.standard.array(forKey: "collapsedFolders") as? [String] {
             collapsedFolders = Set(savedIDs.compactMap { UUID(uuidString: $0) })
+        }
+    }
+    
+    // MARK: - Cleanup Operations
+    
+    /// Perform comprehensive cleanup of duplicates and failing feeds
+    func performCleanup() async -> CleanupResult {
+        var result = CleanupResult()
+        
+        // 1. Remove duplicate folders
+        let duplicateFolders = await removeDuplicateFolders()
+        result.foldersRemoved = duplicateFolders
+        
+        // 2. Remove duplicate feeds
+        let duplicateFeeds = await removeDuplicateFeeds()
+        result.feedsRemoved = duplicateFeeds
+        
+        // 3. Remove failing feeds (after 3 retries)
+        let failingFeeds = await removeFailingFeeds()
+        result.failingFeedsRemoved = failingFeeds
+        
+        return result
+    }
+    
+    /// Remove duplicate folders (keeping the first occurrence)
+    private func removeDuplicateFolders() async -> Int {
+        let folderDescriptor = FetchDescriptor<Folder>()
+        guard let allFolders = try? await MainActor.run(body: { try modelContext.fetch(folderDescriptor) }) else {
+            return 0
+        }
+        
+        var seenNames: [String: Folder] = [:]
+        var duplicates: [Folder] = []
+        
+        for folder in allFolders {
+            if let existingFolder = seenNames[folder.name] {
+                // This is a duplicate - merge feeds into the existing folder
+                for feed in folder.feeds {
+                    feed.folder = existingFolder
+                }
+                duplicates.append(folder)
+            } else {
+                seenNames[folder.name] = folder
+            }
+        }
+        
+        // Remove duplicate folders
+        await MainActor.run {
+            for duplicate in duplicates {
+                modelContext.delete(duplicate)
+            }
+            try? modelContext.save()
+            loadFeeds()
+        }
+        
+        return duplicates.count
+    }
+    
+    /// Remove duplicate feeds (keeping the first occurrence by URL)
+    private func removeDuplicateFeeds() async -> Int {
+        let feedDescriptor = FetchDescriptor<Feed>()
+        guard let allFeeds = try? await MainActor.run(body: { try modelContext.fetch(feedDescriptor) }) else {
+            return 0
+        }
+        
+        var seenURLs: [URL: Feed] = [:]
+        var duplicates: [Feed] = []
+        
+        for feed in allFeeds {
+            if seenURLs[feed.feedURL] != nil {
+                // This is a duplicate
+                duplicates.append(feed)
+            } else {
+                seenURLs[feed.feedURL] = feed
+            }
+        }
+        
+        // Remove duplicate feeds
+        await MainActor.run {
+            for duplicate in duplicates {
+                modelContext.delete(duplicate)
+            }
+            try? modelContext.save()
+            loadFeeds()
+        }
+        
+        return duplicates.count
+    }
+    
+    /// Remove feeds that fail to load after 3 retry attempts
+    private func removeFailingFeeds() async -> Int {
+        let feedDescriptor = FetchDescriptor<Feed>()
+        guard let allFeeds = try? await MainActor.run(body: { try modelContext.fetch(feedDescriptor) }) else {
+            return 0
+        }
+        
+        var failedFeeds: [Feed] = []
+        
+        for feed in allFeeds {
+            var retryCount = 0
+            var lastError: Error?
+            
+            // Try 3 times
+            while retryCount < 3 {
+                do {
+                    _ = try await fetcher.fetchFeed(from: feed.feedURL)
+                    // Success - feed is working
+                    break
+                } catch {
+                    lastError = error
+                    retryCount += 1
+                    if retryCount < 3 {
+                        // Wait 2 seconds between retries
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    }
+                }
+            }
+            
+            // If all 3 attempts failed, mark for removal
+            if retryCount == 3 {
+                print("Feed '\(feed.title)' failed after 3 attempts: \(lastError?.localizedDescription ?? "Unknown error")")
+                failedFeeds.append(feed)
+            }
+        }
+        
+        // Remove failed feeds
+        await MainActor.run {
+            for feed in failedFeeds {
+                modelContext.delete(feed)
+            }
+            try? modelContext.save()
+            loadFeeds()
+        }
+        
+        return failedFeeds.count
+    }
+}
+
+/// Result of cleanup operation
+struct CleanupResult {
+    var foldersRemoved: Int = 0
+    var feedsRemoved: Int = 0
+    var failingFeedsRemoved: Int = 0
+    
+    var totalItemsRemoved: Int {
+        foldersRemoved + feedsRemoved + failingFeedsRemoved
+    }
+    
+    var summary: String {
+        var parts: [String] = []
+        if foldersRemoved > 0 {
+            parts.append("\(foldersRemoved) duplicate folder\(foldersRemoved == 1 ? "" : "s")")
+        }
+        if feedsRemoved > 0 {
+            parts.append("\(feedsRemoved) duplicate feed\(feedsRemoved == 1 ? "" : "s")")
+        }
+        if failingFeedsRemoved > 0 {
+            parts.append("\(failingFeedsRemoved) failing feed\(failingFeedsRemoved == 1 ? "" : "s")")
+        }
+        
+        if parts.isEmpty {
+            return "No issues found"
+        } else {
+            return "Removed: " + parts.joined(separator: ", ")
         }
     }
 }

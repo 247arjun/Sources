@@ -11,10 +11,23 @@ import SwiftData
 @main
 struct SourcesApp: App {
     @State private var settings = AppSettings()
+    @State private var feedListViewModel: FeedListViewModel?
     
     var body: some Scene {
         WindowGroup {
             ContentView(settings: settings)
+                .onAppear {
+                    // Capture the viewModel from ContentView via notification
+                    NotificationCenter.default.addObserver(
+                        forName: .feedListViewModelReady,
+                        object: nil,
+                        queue: .main
+                    ) { notification in
+                        if let viewModel = notification.object as? FeedListViewModel {
+                            feedListViewModel = viewModel
+                        }
+                    }
+                }
         }
         .modelContainer(for: [Feed.self, Article.self, Folder.self])
         .commands {
@@ -158,7 +171,7 @@ struct SourcesApp: App {
         }
         
         Settings {
-            SettingsView(settings: settings)
+            SettingsView(settings: settings, viewModel: feedListViewModel)
         }
     }
 }
@@ -197,4 +210,7 @@ extension Notification.Name {
     
     // Help menu
     static let showKeyboardShortcutsRequested = Notification.Name("showKeyboardShortcutsRequested")
+    
+    // Internal
+    static let feedListViewModelReady = Notification.Name("feedListViewModelReady")
 }

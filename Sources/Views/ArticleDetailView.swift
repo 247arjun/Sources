@@ -43,6 +43,11 @@ struct ArticleDetailView: View {
                     
                     Divider()
                     
+                    // AI Summary Section
+                    AISummarySection(article: article, viewModel: viewModel)
+                    
+                    Divider()
+                    
                     // WebView
                     WebView(url: article.url, content: article.content)
                         .onAppear {
@@ -194,5 +199,144 @@ struct WebView: NSViewRepresentable {
         try? await CacheManager.shared.cacheArticle(id: articleID, html: styledHTML)
         
         return styledHTML
+    }
+}
+
+// MARK: - AI Summary Section
+
+struct AISummarySection: View {
+    let article: Article
+    @Bindable var viewModel: ArticleListViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("AI Summary", systemImage: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(.purple)
+                
+                Spacer()
+                
+                if article.aiSummary != nil {
+                    Button(action: {
+                        viewModel.clearSummary(for: article)
+                    }) {
+                        Label("Clear", systemImage: "xmark.circle.fill")
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear AI summary")
+                }
+            }
+            
+            if let aiSummary = article.aiSummary {
+                // Show existing summary
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(aiSummary)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .textSelection(.enabled)
+                    
+                    if let generatedDate = article.aiSummaryGeneratedDate {
+                        Text("Generated \(generatedDate, style: .relative)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.purple.opacity(0.1))
+                .cornerRadius(8)
+                
+                Button(action: {
+                    Task {
+                        await viewModel.generateSummary(for: article)
+                    }
+                }) {
+                    Label("Regenerate", systemImage: "arrow.clockwise")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .disabled(viewModel.isSummarizing)
+                
+            } else if viewModel.isSummarizing {
+                // Show loading state
+                HStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Generating summary...")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.purple.opacity(0.05))
+                .cornerRadius(8)
+                
+            } else if let error = viewModel.summarizationError {
+                // Show error state
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(error)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Button(action: {
+                        Task {
+                            await viewModel.generateSummary(for: article)
+                        }
+                    }) {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(8)
+                
+            } else if !viewModel.isSummarizationAvailable {
+                // Show unavailable state
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(viewModel.summarizationAvailabilityMessage)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    
+                    if viewModel.summarizationAvailabilityMessage.contains("Apple Intelligence") {
+                        Button("Open Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.1))
+                .cornerRadius(8)
+                
+            } else {
+                // Show generate button
+                Button(action: {
+                    Task {
+                        await viewModel.generateSummary(for: article)
+                    }
+                }) {
+                    Label("Generate Summary", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .tint(.purple)
+            }
+        }
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
     }
 }
