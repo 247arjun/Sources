@@ -1,5 +1,7 @@
 # Sources
-A modern macOS RSS Reader app built with SwiftUI
+> A modern macOS RSS Reader app built with SwiftUI
+
+![](./Sources-screenshot.png)
 
 ## Features
 
