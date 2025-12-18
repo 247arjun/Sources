@@ -23,15 +23,25 @@ class OPMLParser: NSObject, XMLParserDelegate {
     private var outlines: [OPMLOutline] = []
     private var outlineStack: [(outline: OPMLOutline?, children: [OPMLOutline])] = [(nil, [])]
     
-    func parse(data: Data) throws -> [OPMLOutline] {
-        let parser = XMLParser(data: data)
-        parser.delegate = self
-        
-        guard parser.parse() else {
-            throw NSError(domain: "OPMLParser", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to parse OPML"])
-        }
-        
-        return outlines
+    func parse(data: Data) async throws -> [OPMLOutline] {
+        // Execute XML parsing on a background thread to avoid blocking
+        return try await Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self = self else {
+                throw NSError(domain: "OPMLParser", code: 1, userInfo: [NSLocalizedDescriptionKey: "Parser deallocated"])
+            }
+            
+            return try await withCheckedThrowingContinuation { continuation in
+                let parser = XMLParser(data: data)
+                parser.delegate = self
+                
+                if parser.parse() {
+                    continuation.resume(returning: self.outlines)
+                } else {
+                    let error = NSError(domain: "OPMLParser", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to parse OPML"])
+                    continuation.resume(throwing: error)
+                }
+            }
+        }.value
     }
     
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String] = [:]) {

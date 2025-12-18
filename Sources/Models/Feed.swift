@@ -17,6 +17,7 @@ final class Feed {
     var feedDescription: String?
     var imageURL: URL?
     var lastUpdated: Date
+    var cachedUnreadCount: Int = 0
     
     @Relationship(deleteRule: .cascade, inverse: \Article.feed)
     var articles: [Article] = []
@@ -24,7 +25,11 @@ final class Feed {
     var folder: Folder?
     
     var unreadCount: Int {
-        articles.filter { !$0.isRead }.count
+        cachedUnreadCount
+    }
+    
+    func updateUnreadCount() {
+        cachedUnreadCount = articles.filter { !$0.isRead }.count
     }
     
     init(
@@ -45,5 +50,6 @@ final class Feed {
         self.imageURL = imageURL
         self.lastUpdated = lastUpdated
         self.folder = folder
+        self.cachedUnreadCount = 0
     }
 }

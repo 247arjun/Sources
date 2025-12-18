@@ -24,7 +24,8 @@ class FeedListViewModel {
     var selectedFeeds: Set<Feed> = []
     var selectedSmartFolder: SmartFolder?
     var isRefreshing = false
-    var errorMessage: String?
+    var hasRefreshError = false
+    var failedFeeds: [(feed: Feed, error: Error)] = []
     var collapsedFolders: Set<Folder.ID> = [] {
         didSet {
             saveCollapsedState()
@@ -71,6 +72,11 @@ class FeedListViewModel {
         let feedDescriptor = FetchDescriptor<Feed>(sortBy: [SortDescriptor(\.title)])
         feeds = (try? modelContext.fetch(feedDescriptor)) ?? []
         
+        // Update cached unread counts for all feeds
+        for feed in feeds {
+            feed.updateUnreadCount()
+        }
+        
         let folderDescriptor = FetchDescriptor<Folder>(sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)])
         folders = (try? modelContext.fetch(folderDescriptor)) ?? []
     }
@@ -98,10 +104,10 @@ class FeedListViewModel {
         loadFeeds()
     }
     
-    func addFeed(urlString: String) async {
+    func addFeed(urlString: String) async -> Result<Feed, Error> {
         do {
             isRefreshing = true
-            errorMessage = nil
+            hasRefreshError = false
             
             // Discover and validate feed URL
             let feedURL = try await fetcher.discoverFeed(from: urlString)
@@ -115,10 +121,9 @@ class FeedListViewModel {
             
             if allFeeds.contains(where: { $0.feedURL == feedURL }) {
                 await MainActor.run {
-                    errorMessage = "This feed is already added"
                     isRefreshing = false
                 }
-                return
+                return .failure(NSError(domain: "FeedListViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "This feed is already added"]))
             }
             
             // Create feed
@@ -155,15 +160,16 @@ class FeedListViewModel {
                 selectedFeed = feed
                 isRefreshing = false
             }
+            return .success(feed)
         } catch {
             await MainActor.run {
-                errorMessage = "Failed to add feed: \(error.localizedDescription)"
                 isRefreshing = false
             }
+            return .failure(error)
         }
     }
     
-    func refreshFeed(_ feed: Feed) async {
+    func refreshFeed(_ feed: Feed) async -> Result<Void, Error> {
         do {
             let parsedFeed = try await fetcher.fetchFeed(from: feed.feedURL)
             
@@ -198,31 +204,59 @@ class FeedListViewModel {
                 }
                 
                 try? modelContext.save()
-                
+                // Update cached unread count for performance
+                feed.updateUnreadCount()
                 // Trigger UI update by updating the selected feed reference
                 if selectedFeed?.id == feed.id {
                     selectedFeed = feed
                 }
             }
+            return .success(())
         } catch {
-            await MainActor.run {
-                errorMessage = "Failed to refresh feed: \(error.localizedDescription)"
-            }
+            return .failure(error)
         }
     }
     
     func refreshAllFeeds() async {
         await MainActor.run {
             isRefreshing = true
-            errorMessage = nil
+            hasRefreshError = false
+            failedFeeds = []
         }
         
-        for feed in feeds {
-            await refreshFeed(feed)
+        // Refresh feeds concurrently in batches of 5 to avoid overwhelming the system
+        let batchSize = 5
+        for batchStart in stride(from: 0, to: feeds.count, by: batchSize) {
+            let batchEnd = min(batchStart + batchSize, feeds.count)
+            let batch = Array(feeds[batchStart..<batchEnd])
+            
+            await withTaskGroup(of: (Feed, Result<Void, Error>).self) { group in
+                for feed in batch {
+                    group.addTask {
+                        let result = await self.refreshFeed(feed)
+                        return (feed, result)
+                    }
+                }
+                
+                for await (feed, result) in group {
+                    if case .failure(let error) = result {
+                        await MainActor.run {
+                            failedFeeds.append((feed: feed, error: error))
+                        }
+                    }
+                }
+            }
         }
         
         await MainActor.run {
             isRefreshing = false
+            // Delay showing error icon to allow animation to complete
+            if !failedFeeds.isEmpty {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
+                    hasRefreshError = true
+                }
+            }
         }
     }
     
@@ -259,7 +293,7 @@ class FeedListViewModel {
             do {
                 await MainActor.run {
                     isRefreshing = true
-                    errorMessage = nil
+                    hasRefreshError = false
                 }
                 
                 // Start accessing security-scoped resource
@@ -268,9 +302,13 @@ class FeedListViewModel {
                 }
                 defer { url.stopAccessingSecurityScopedResource() }
                 
-                let data = try Data(contentsOf: url)
+                // Read file asynchronously on background thread
+                let data = try await Task.detached(priority: .userInitiated) {
+                    try Data(contentsOf: url)
+                }.value
+                
                 let parser = OPMLParser()
-                let outlines = try parser.parse(data: data)
+                let outlines = try await parser.parse(data: data)
                 
                 await processOPMLOutlines(outlines, parentFolder: nil)
                 
@@ -279,8 +317,15 @@ class FeedListViewModel {
                     isRefreshing = false
                 }
             } catch {
+                // Track OPML import error
                 await MainActor.run {
-                    errorMessage = "Failed to import OPML: \(error.localizedDescription)"
+                    let dummyFeed = Feed(title: "OPML Import", feedURL: url, lastUpdated: Date())
+                    failedFeeds = [(feed: dummyFeed, error: error)]
+                    
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        hasRefreshError = true
+                    }
                     isRefreshing = false
                 }
             }
@@ -381,6 +426,7 @@ class FeedListViewModel {
             for article in feed.articles {
                 article.isRead = true
             }
+            feed.updateUnreadCount()
         }
         try? modelContext.save()
     }
@@ -389,6 +435,7 @@ class FeedListViewModel {
         for article in feed.articles {
             article.isRead = true
         }
+        feed.updateUnreadCount()
         try? modelContext.save()
     }
     
@@ -397,6 +444,7 @@ class FeedListViewModel {
             for article in feed.articles {
                 article.isRead = true
             }
+            feed.updateUnreadCount()
         }
         try? modelContext.save()
     }

@@ -80,28 +80,19 @@ class ArticleListViewModel {
             return
         }
         
-        // Get all articles from all feeds in the folder
+        // Collect all articles from feeds in the folder
+        // This is more efficient than loading feed.articles directly as it uses relationship traversal
         var fetchedArticles: [Article] = []
         for feed in folder.feeds {
             fetchedArticles.append(contentsOf: feed.articles)
         }
         
-        // Filter by search text
-        if !searchText.isEmpty {
-            fetchedArticles = fetchedArticles.filter { article in
-                article.title.localizedCaseInsensitiveContains(searchText) ||
-                article.content.localizedCaseInsensitiveContains(searchText) ||
-                (article.summary?.localizedCaseInsensitiveContains(searchText) ?? false) ||
-                (article.author?.localizedCaseInsensitiveContains(searchText) ?? false)
-            }
-        }
-        
-        // Filter if needed
+        // Filter by unread status
         if showUnreadOnly {
             fetchedArticles = fetchedArticles.filter { !$0.isRead }
         }
         
-        // Sort based on selected order
+        // Sort the combined results
         switch sortOrder {
         case .dateDescending:
             fetchedArticles.sort { $0.publishedDate > $1.publishedDate }
@@ -111,12 +102,23 @@ class ArticleListViewModel {
             fetchedArticles.sort { $0.title < $1.title }
         }
         
+        // Filter by search text (in memory)
+        if !searchText.isEmpty {
+            fetchedArticles = fetchedArticles.filter { article in
+                article.title.localizedCaseInsensitiveContains(searchText) ||
+                article.content.localizedCaseInsensitiveContains(searchText) ||
+                (article.summary?.localizedCaseInsensitiveContains(searchText) ?? false) ||
+                (article.author?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+        
         articles = fetchedArticles
     }
     
     func toggleReadStatus(_ article: Article) {
         article.isRead.toggle()
         try? modelContext.save()
+        article.feed?.updateUnreadCount()
     }
     
     func toggleStarred(_ article: Article) {
@@ -127,6 +129,7 @@ class ArticleListViewModel {
     func markAsRead(_ article: Article) {
         article.isRead = true
         try? modelContext.save()
+        article.feed?.updateUnreadCount()
     }
     
     func markAllAsRead(for feed: Feed) {
@@ -134,6 +137,7 @@ class ArticleListViewModel {
             article.isRead = true
         }
         try? modelContext.save()
+        feed.updateUnreadCount()
         loadArticles(for: feed)
     }
     

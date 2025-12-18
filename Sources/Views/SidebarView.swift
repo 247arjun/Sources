@@ -28,100 +28,87 @@ struct SidebarView: View {
         }
     }
     
+    private var totalUnreadCount: Int {
+        viewModel.feeds.reduce(0, { $0 + $1.unreadCount })
+    }
+    
+    private var smartFoldersSection: some View {
+        Section("Smart Folders") {
+            SmartFolderRow(
+                icon: "tray.fill",
+                title: "All Feeds",
+                count: totalUnreadCount > 0 ? totalUnreadCount : nil,
+                isSelected: viewModel.selectedSmartFolder == .allFeeds,
+                action: {
+                    viewModel.selectedFeed = nil
+                    viewModel.selectedSmartFolder = .allFeeds
+                },
+                markAllAsReadAction: {
+                    viewModel.markAllAsReadInAllFeeds()
+                }
+            )
+            
+            SmartFolderRow(
+                icon: "circle.fill",
+                title: "Unread",
+                count: totalUnreadCount > 0 ? totalUnreadCount : nil,
+                isSelected: viewModel.selectedSmartFolder == .unread,
+                action: {
+                    viewModel.selectedFeed = nil
+                    viewModel.selectedSmartFolder = .unread
+                },
+                markAllAsReadAction: {
+                    viewModel.markAllAsReadInAllFeeds()
+                }
+            )
+            
+            SmartFolderRow(
+                icon: "star.fill",
+                title: "Starred",
+                count: nil,
+                isSelected: viewModel.selectedSmartFolder == .starred,
+                action: {
+                    viewModel.selectedFeed = nil
+                    viewModel.selectedSmartFolder = .starred
+                },
+                markAllAsReadAction: {
+                    viewModel.markAllAsReadInStarred()
+                }
+            )
+            
+            SmartFolderRow(
+                icon: "clock.fill",
+                title: "Recent",
+                count: nil,
+                isSelected: viewModel.selectedSmartFolder == .recent,
+                action: {
+                    viewModel.selectedFeed = nil
+                    viewModel.selectedSmartFolder = .recent
+                },
+                markAllAsReadAction: {
+                    viewModel.markAllAsReadInRecent()
+                }
+            )
+        }
+    }
+    
     var body: some View {
         List(selection: isSelecting ? $viewModel.selectedFeeds : Binding(
             get: { viewModel.selectedFeed.map { Set([$0]) } ?? [] },
             set: { viewModel.selectedFeed = $0.first }
         )) {
-            // Smart folders
-            Section("Smart Folders") {
-                Button(action: {
-                    viewModel.selectedFeed = nil
-                    viewModel.selectedSmartFolder = .allFeeds
-                }) {
-                    HStack {
-                        Image(systemName: "tray.fill")
-                        Text("All Feeds")
-                        Spacer()
-                        let totalUnread = viewModel.feeds.reduce(0, { $0 + $1.unreadCount })
-                        if totalUnread > 0 {
-                            Text("\(totalUnread)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button("Mark All as Read") {
-                        viewModel.markAllAsReadInAllFeeds()
-                    }
-                }
-                
-                Button(action: {
-                    viewModel.selectedFeed = nil
-                    viewModel.selectedSmartFolder = .unread
-                }) {
-                    HStack {
-                        Image(systemName: "circle.fill")
-                        Text("Unread")
-                        Spacer()
-                        let totalUnread = viewModel.feeds.reduce(0, { $0 + $1.unreadCount })
-                        if totalUnread > 0 {
-                            Text("\(totalUnread)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button("Mark All as Read") {
-                        viewModel.markAllAsReadInAllFeeds()
-                    }
-                }
-                
-                Button(action: {
-                    viewModel.selectedFeed = nil
-                    viewModel.selectedSmartFolder = .starred
-                }) {
-                    HStack {
-                        Image(systemName: "star.fill")
-                        Text("Starred")
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button("Mark All as Read") {
-                        viewModel.markAllAsReadInStarred()
-                    }
-                }
-                
-                Button(action: {
-                    viewModel.selectedFeed = nil
-                    viewModel.selectedSmartFolder = .recent
-                }) {
-                    HStack {
-                        Image(systemName: "clock.fill")
-                        Text("Recent")
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button("Mark All as Read") {
-                        viewModel.markAllAsReadInRecent()
-                    }
-                }
-            }
+            smartFoldersSection
             
             // Folders with feeds
             ForEach(viewModel.folders) { folder in
                 DisclosureGroup(
                     isExpanded: Binding(
                         get: { !viewModel.isFolderCollapsed(folder) },
-                        set: { _ in viewModel.toggleFolderCollapse(folder) }
+                        set: { expanded in
+                            withAnimation(.none) {
+                                viewModel.toggleFolderCollapse(folder)
+                            }
+                        }
                     )
                 ) {
                     ForEach(folder.feeds.filter { searchText.isEmpty || $0.title.localizedCaseInsensitiveContains(searchText) }) { feed in
@@ -130,6 +117,7 @@ struct SidebarView: View {
                             .contextMenu {
                                 feedContextMenu(for: feed)
                             }
+                            .transition(.identity)
                     }
                 } label: {
                     Button(action: {
@@ -150,6 +138,7 @@ struct SidebarView: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
+                    .listRowBackground(viewModel.selectedFolder == folder ? Color.accentColor.opacity(0.15) : Color.clear)
                     .contextMenu {
                         Button("Mark All as Read") {
                             viewModel.markAllAsRead(in: folder)
@@ -248,14 +237,44 @@ struct SidebarView: View {
             
             ToolbarItem(placement: .automatic) {
                 if !isSelecting {
-                    Button(action: {
-                        Task {
-                            await viewModel.refreshAllFeeds()
+                    Menu {
+                        if viewModel.hasRefreshError {
+                            Section("Failed Feeds") {
+                                ForEach(viewModel.failedFeeds, id: \.feed.id) { failedFeed in
+                                    VStack(alignment: .leading) {
+                                        Text(failedFeed.feed.title)
+                                            .font(.headline)
+                                        Text(errorSummary(for: failedFeed.error))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            
+                            Divider()
+                            
+                            Button("Retry All") {
+                                Task.detached {
+                                    await viewModel.refreshAllFeeds()
+                                }
+                            }
+                        } else {
+                            Button("Refresh All Feeds") {
+                                Task.detached {
+                                    await viewModel.refreshAllFeeds()
+                                }
+                            }
                         }
-                    }) {
-                        Label("Refresh All", systemImage: "arrow.clockwise")
+                    } label: {
+                        if viewModel.hasRefreshError {
+                            Label("Refresh Errors", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        } else {
+                            Label("Refresh All", systemImage: viewModel.isRefreshing ? "arrow.clockwise.circle.fill" : "arrow.clockwise")
+                        }
                     }
-                    .disabled(viewModel.isRefreshing)
+                    .symbolEffect(.rotate, isActive: viewModel.isRefreshing && !viewModel.hasRefreshError)
+                    .help(viewModel.hasRefreshError ? "Click to see which feeds failed" : "Refresh all feeds")
                 } else {
                     Button("Done") {
                         withAnimation {
@@ -288,7 +307,13 @@ struct SidebarView: View {
             defaultFilename: "Sources-Feeds.opml"
         ) { result in
             if case .failure(let error) = result {
-                viewModel.errorMessage = "Failed to export: \(error.localizedDescription)"
+                // Track export error
+                let dummyFeed = Feed(title: "OPML Export", feedURL: URL(string: "file://export")!, lastUpdated: Date())
+                viewModel.failedFeeds = [(feed: dummyFeed, error: error)]
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    viewModel.hasRefreshError = true
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .addFeedRequested)) { _ in
@@ -298,7 +323,7 @@ struct SidebarView: View {
             showingAddFolder = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .refreshAllRequested)) { _ in
-            Task {
+            Task.detached {
                 await viewModel.refreshAllFeeds()
             }
         }
@@ -309,10 +334,10 @@ struct SidebarView: View {
             showingExportPicker = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .editFeedRequested)) { _ in
-            // For now, show context menu actions via alert
+            // Edit feed functionality - to be implemented
             if let feed = viewModel.selectedFeed {
                 // This would open an edit sheet in a full implementation
-                viewModel.errorMessage = "Edit feed: \(feed.title)"
+                print("Edit feed: \(feed.title)")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .deleteFeedRequested)) { _ in
@@ -320,14 +345,35 @@ struct SidebarView: View {
                 viewModel.deleteFeed(feed)
             }
         }
-        .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
-            Button("OK") {
-                viewModel.errorMessage = nil
+    }
+    
+    private func errorSummary(for error: Error) -> String {
+        if let fetchError = error as? FetchError {
+            switch fetchError {
+            case .invalidURL:
+                return "Invalid feed URL"
+            case .networkError:
+                return "Network connection failed"
+            case .httpError(let statusCode):
+                return "Server error (\(statusCode))"
+            case .noData:
+                return "No data received"
             }
-        } message: {
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
+        } else if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "No internet connection"
+            case .timedOut:
+                return "Request timed out"
+            case .cannotFindHost, .dnsLookupFailed:
+                return "Cannot find server"
+            case .secureConnectionFailed:
+                return "SSL/TLS error"
+            default:
+                return "Network error"
             }
+        } else {
+            return "Unknown error"
         }
     }
     
@@ -341,8 +387,14 @@ struct SidebarView: View {
         
         if !isMultiple {
             Button("Refresh") {
-                Task {
-                    await viewModel.refreshFeed(feed)
+                Task.detached {
+                    let result = await viewModel.refreshFeed(feed)
+                    if case .failure(let error) = result {
+                        await MainActor.run {
+                            viewModel.failedFeeds = [(feed: feed, error: error)]
+                            viewModel.hasRefreshError = true
+                        }
+                    }
                 }
             }
             
@@ -440,6 +492,8 @@ struct FeedRow: View {
 struct AddFeedSheet: View {
     @Bindable var viewModel: FeedListViewModel
     @State private var urlString = ""
+    @State private var errorMessage: String?
+    @State private var isAdding = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -448,6 +502,13 @@ struct AddFeedSheet: View {
                 Section {
                     TextField("Feed URL", text: $urlString)
                         .textFieldStyle(.plain)
+                        .disabled(isAdding)
+                    
+                    if let errorMessage = errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 } footer: {
                     Text("Enter the URL of an RSS or Atom feed, or a website URL to auto-discover feeds.")
                         .font(.caption)
@@ -461,18 +522,28 @@ struct AddFeedSheet: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .disabled(isAdding)
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
+                    Button(isAdding ? "Adding..." : "Add") {
                         Task {
-                            await viewModel.addFeed(urlString: urlString)
-                            if viewModel.errorMessage == nil {
-                                dismiss()
+                            isAdding = true
+                            errorMessage = nil
+                            let result = await viewModel.addFeed(urlString: urlString)
+                            isAdding = false
+                            
+                            switch result {
+                            case .success:
+                                await MainActor.run {
+                                    dismiss()
+                                }
+                            case .failure(let error):
+                                errorMessage = error.localizedDescription
                             }
                         }
                     }
-                    .disabled(urlString.isEmpty || viewModel.isRefreshing)
+                    .disabled(urlString.isEmpty || isAdding)
                 }
             }
         }
@@ -516,5 +587,36 @@ struct AddFolderSheet: View {
             }
         }
         .frame(width: 400, height: 200)
+    }
+}
+
+struct SmartFolderRow: View {
+    let icon: String
+    let title: String
+    let count: Int?
+    let isSelected: Bool
+    let action: () -> Void
+    let markAllAsReadAction: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: icon)
+                Text(title)
+                Spacer()
+                if let count = count, count > 0 {
+                    Text("\(count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+        .contextMenu {
+            Button("Mark All as Read") {
+                markAllAsReadAction()
+            }
+        }
     }
 }

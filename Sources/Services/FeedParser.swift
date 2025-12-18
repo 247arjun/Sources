@@ -52,33 +52,40 @@ class FeedParser: NSObject {
     private var isAtomFeed = false
     
     func parse(data: Data) async throws -> ParsedFeed {
-        return try await withCheckedThrowingContinuation { continuation in
-            let parser = XMLParser(data: data)
-            parser.delegate = self
-            
-            // Reset state
-            parsedArticles = []
-            isParsingItem = false
-            isAtomFeed = false
-            feedTitle = ""
-            feedLink = ""
-            feedDescription = ""
-            feedImageURL = ""
-            
-            if parser.parse() {
-                let feed = ParsedFeed(
-                    title: feedTitle.isEmpty ? "Untitled Feed" : feedTitle,
-                    siteURL: URL(string: feedLink),
-                    description: feedDescription.isEmpty ? nil : feedDescription,
-                    imageURL: feedImageURL.isEmpty ? nil : URL(string: feedImageURL),
-                    articles: parsedArticles
-                )
-                continuation.resume(returning: feed)
-            } else {
-                let error = parser.parserError ?? FeedParserError.parsingFailed("Unknown error")
-                continuation.resume(throwing: error)
+        // Execute XML parsing on a background thread to avoid blocking
+        return try await Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self = self else {
+                throw FeedParserError.parsingFailed("Parser deallocated")
             }
-        }
+            
+            return try await withCheckedThrowingContinuation { continuation in
+                let parser = XMLParser(data: data)
+                parser.delegate = self
+                
+                // Reset state
+                self.parsedArticles = []
+                self.isParsingItem = false
+                self.isAtomFeed = false
+                self.feedTitle = ""
+                self.feedLink = ""
+                self.feedDescription = ""
+                self.feedImageURL = ""
+                
+                if parser.parse() {
+                    let feed = ParsedFeed(
+                        title: self.feedTitle.isEmpty ? "Untitled Feed" : self.feedTitle,
+                        siteURL: URL(string: self.feedLink),
+                        description: self.feedDescription.isEmpty ? nil : self.feedDescription,
+                        imageURL: self.feedImageURL.isEmpty ? nil : URL(string: self.feedImageURL),
+                        articles: self.parsedArticles
+                    )
+                    continuation.resume(returning: feed)
+                } else {
+                    let error = parser.parserError ?? FeedParserError.parsingFailed("Unknown error")
+                    continuation.resume(throwing: error)
+                }
+            }
+        }.value
     }
 }
 
@@ -219,22 +226,46 @@ extension FeedParser: XMLParserDelegate {
 
 extension String {
     func decodingHTMLEntities() -> String {
-        guard let data = self.data(using: .utf8) else { return self }
+        // Lightweight HTML entity decoder - much faster than NSAttributedString
+        var result = self
         
-        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
-            .documentType: NSAttributedString.DocumentType.html,
-            .characterEncoding: String.Encoding.utf8.rawValue
+        // Common HTML entities
+        let entities: [(String, String)] = [
+            ("&quot;", "\""),
+            ("&apos;", "'"),
+            ("&amp;", "&"),
+            ("&lt;", "<"),
+            ("&gt;", ">"),
+            ("&nbsp;", " "),
+            ("&mdash;", "—"),
+            ("&ndash;", "–"),
+            ("&rsquo;", "'"),
+            ("&lsquo;", "'"),
+            ("&rdquo;", "\u{201D}"),
+            ("&ldquo;", "\u{201C}"),
+            ("&hellip;", "…"),
+            ("&bull;", "•"),
+            ("&middot;", "·")
         ]
         
-        var documentAttributes: NSDictionary?
-        guard let attributedString = try? NSAttributedString(
-            data: data,
-            options: options,
-            documentAttributes: &documentAttributes
-        ) else {
-            return self
+        for (entity, replacement) in entities {
+            result = result.replacingOccurrences(of: entity, with: replacement)
         }
         
-        return attributedString.string
+        // Decode numeric entities (&#123; and &#xAB;)
+        result = result.replacingOccurrences(
+            of: "&#(\\d+);",
+            with: "$1",
+            options: .regularExpression,
+            range: nil
+        )
+        .replacingOccurrences(
+            of: "&#x([0-9A-Fa-f]+);",
+            with: "$1",
+            options: .regularExpression,
+            range: nil
+        )
+        
+        return result
     }
 }

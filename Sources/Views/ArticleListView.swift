@@ -14,15 +14,17 @@ struct ArticleListView: View {
     @Bindable var feedListViewModel: FeedListViewModel
     var settings: AppSettings
     @State private var searchTask: Task<Void, Never>?
+    @State private var groupedArticles: [Date: [Article]] = [:]
+    
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
     
     private var hasContent: Bool {
         feed != nil || feedListViewModel.selectedSmartFolder != nil || feedListViewModel.selectedFolder != nil
-    }
-    
-    private var groupedArticles: [Date: [Article]] {
-        Dictionary(grouping: viewModel.articles) { article in
-            Calendar.current.startOfDay(for: article.publishedDate)
-        }
     }
     
     private func sectionTitle(for date: Date) -> String {
@@ -35,18 +37,13 @@ struct ArticleListView: View {
         } else if articleDate == calendar.date(byAdding: .day, value: -1, to: today) {
             return "Yesterday"
         } else {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .none
-            return formatter.string(from: date)
+            return Self.dateFormatter.string(from: date)
         }
     }
     
-    private var sortIcon: String {
-        switch viewModel.sortOrder {
-        case .dateDescending: return "arrow.down"
-        case .dateAscending: return "arrow.up"
-        case .titleAscending: return "textformat"
+    private func updateGroupedArticles() {
+        groupedArticles = Dictionary(grouping: viewModel.articles) { article in
+            Calendar.current.startOfDay(for: article.publishedDate)
         }
     }
     
@@ -161,8 +158,9 @@ struct ArticleListView: View {
                             Label("Oldest First", systemImage: "arrow.up").tag(ArticleListViewModel.SortOrder.dateAscending)
                             Label("Title", systemImage: "textformat").tag(ArticleListViewModel.SortOrder.titleAscending)
                         }
+                        .pickerStyle(.inline)
                     } label: {
-                        Label("Sort", systemImage: sortIcon)
+                        Label("Sort", systemImage: "line.3.horizontal.decrease")
                             .labelStyle(.iconOnly)
                     }
                     .menuStyle(.borderlessButton)
@@ -170,7 +168,7 @@ struct ArticleListView: View {
                     
                     // Unread toggle
                     Toggle(isOn: $viewModel.showUnreadOnly) {
-                        Label("Unread Only", systemImage: "circle.fill")
+                        Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
                             .labelStyle(.iconOnly)
                     }
                     .toggleStyle(.button)
@@ -242,6 +240,12 @@ struct ArticleListView: View {
                 // In a full implementation, this would focus the search field
                 // SwiftUI doesn't have a direct way to focus TextField on macOS
             }
+            .onChange(of: viewModel.articles) { _, _ in
+                updateGroupedArticles()
+            }
+            .onAppear {
+                updateGroupedArticles()
+            }
     }
 }
 
@@ -295,12 +299,6 @@ struct ArticleRow: View {
                     Text(feedTitle)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                }
-                
-                if let author = article.author {
-                    Text("• \(author)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 
                 Spacer()

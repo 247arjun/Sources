@@ -62,7 +62,10 @@ actor CacheManager {
             throw CacheError.invalidData
         }
         
-        try data.write(to: fileURL)
+        // Write file asynchronously on background thread
+        try await Task.detached(priority: .utility) {
+            try data.write(to: fileURL)
+        }.value
         
         let size = Int64(data.count)
         let entry = CacheEntry(
@@ -82,12 +85,14 @@ actor CacheManager {
         let hash = Self.hashString(id)
         let fileURL = cacheDirectory.appendingPathComponent(hash + ".html")
         
-        guard let data = try? Data(contentsOf: fileURL),
-              let html = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-        
-        return html
+        // Read file asynchronously on background thread
+        return await Task.detached(priority: .userInitiated) {
+            guard let data = try? Data(contentsOf: fileURL),
+                  let html = String(data: data, encoding: .utf8) else {
+                return nil
+            }
+            return html
+        }.value
     }
     
     func isCached(articleID: String) async -> Bool {
@@ -98,11 +103,16 @@ actor CacheManager {
     // MARK: - Cache Management
     
     func clearCache() async throws {
-        // Remove all cached files
-        if fileManager.fileExists(atPath: cacheDirectory.path) {
-            try fileManager.removeItem(at: cacheDirectory)
-            try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        }
+        let cachePath = cacheDirectory.path
+        let cacheDir = cacheDirectory
+        
+        // Remove all cached files asynchronously on background thread
+        try await Task.detached(priority: .utility) { [fileManager] in
+            if fileManager.fileExists(atPath: cachePath) {
+                try fileManager.removeItem(at: cacheDir)
+                try fileManager.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+            }
+        }.value
         
         // Reset metadata
         metadata = CacheMetadata()
@@ -115,14 +125,24 @@ actor CacheManager {
         let cutoffDate = Date().addingTimeInterval(-timeInterval)
         var removedSize: Int64 = 0
         var keysToRemove: [String] = []
+        let cacheDir = cacheDirectory
         
+        // Collect files to remove
         for (hash, entry) in metadata.entries {
             if entry.cachedDate < cutoffDate {
-                let fileURL = cacheDirectory.appendingPathComponent(hash + ".html")
-                try? fileManager.removeItem(at: fileURL)
-                removedSize += entry.size
                 keysToRemove.append(hash)
+                removedSize += entry.size
             }
+        }
+        
+        // Remove files asynchronously on background thread
+        if !keysToRemove.isEmpty {
+            try await Task.detached(priority: .utility) { [fileManager] in
+                for hash in keysToRemove {
+                    let fileURL = cacheDir.appendingPathComponent(hash + ".html")
+                    try? fileManager.removeItem(at: fileURL)
+                }
+            }.value
         }
         
         for key in keysToRemove {
@@ -143,16 +163,26 @@ actor CacheManager {
         
         var removedSize: Int64 = 0
         var keysToRemove: [String] = []
+        let cacheDir = cacheDirectory
         
+        // Collect files to remove
         for (hash, entry) in sortedEntries {
             if metadata.totalSize - removedSize <= limit {
                 break
             }
             
-            let fileURL = cacheDirectory.appendingPathComponent(hash + ".html")
-            try? fileManager.removeItem(at: fileURL)
-            removedSize += entry.size
             keysToRemove.append(hash)
+            removedSize += entry.size
+        }
+        
+        // Remove files asynchronously on background thread
+        if !keysToRemove.isEmpty {
+            try await Task.detached(priority: .utility) { [fileManager] in
+                for hash in keysToRemove {
+                    let fileURL = cacheDir.appendingPathComponent(hash + ".html")
+                    try? fileManager.removeItem(at: fileURL)
+                }
+            }.value
         }
         
         for key in keysToRemove {
@@ -180,7 +210,12 @@ actor CacheManager {
     
     private func saveMetadata() async throws {
         let data = try JSONEncoder().encode(metadata)
-        try data.write(to: metadataFile)
+        let fileURL = metadataFile
+        
+        // Write file asynchronously on background thread
+        try await Task.detached(priority: .utility) {
+            try data.write(to: fileURL)
+        }.value
     }
     
     private static func hashString(_ string: String) -> String {
